@@ -1,5 +1,5 @@
 import './App.css';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 function loadUsers() {
   try {
@@ -82,6 +82,27 @@ function App() {
     };
     reader.readAsText(file);
   };
+
+  // Try to auto-load play result from a fixed local path when entering result screen.
+  // 자신의 파일 경로로 설정하세요
+  const DEFAULT_PLAY_RESULT_PATH = 'file:///C:/Users/zsxcd/AppData/LocalLow/ReFit/Refit_Demo/WoodGameData.json';
+  useEffect(() => {
+    if (screen !== 'result') return;
+
+    // attempt to fetch the file via file:// URL (may be blocked by browser security)
+    (async () => {
+      try {
+        const res = await fetch(DEFAULT_PLAY_RESULT_PATH);
+        if (!res.ok) throw new Error('파일을 불러올 수 없습니다: ' + res.status);
+        const data = await res.json();
+        setPlayResult(data);
+        console.log('Auto-loaded play result from default path:', DEFAULT_PLAY_RESULT_PATH);
+      } catch (err) {
+        console.warn('자동 로드 실패:', err.message);
+        // leave playResult as is and let user upload manually
+      }
+    })();
+  }, [screen]);
 
   const handleLoginChange = (e) => {
     const { name, value } = e.target;
