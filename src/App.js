@@ -98,7 +98,34 @@ function App() {
     }
     setCurrentUserId(found.user_id);
     setLoginForm({ personal_id: '', personal_pw: '' });
+    setScreen('postLogin');
+  };
+
+  const openProfileForCurrentUser = () => {
+    if (!currentUserId) {
+      setScreen('profile');
+      return;
+    }
+    const users = loadUsers();
+    const u = users.find((x) => x.user_id === currentUserId);
+    if (!u) {
+      setProfile({ age: '', gender: '', height: '', weight: '', dominant_hand: '' });
+    } else {
+      setProfile({
+        age: u.age !== null && u.age !== undefined ? String(u.age) : '',
+        gender: u.gender || '',
+        height: u.height !== null && u.height !== undefined ? String(u.height) : '',
+        weight: u.weight !== null && u.weight !== undefined ? String(u.weight) : '',
+        dominant_hand: u.dominant_hand || '',
+      });
+    }
     setScreen('profile');
+  };
+
+  const startGameForCurrentUser = () => {
+    // clear any previous play result and go to result screen (placeholder for actual game)
+    setPlayResult(null);
+    setScreen('result');
   };
 
   const handleSignupSubmit = (event) => {
@@ -252,6 +279,29 @@ function App() {
                 이미 계정이 있나요? <a href="#login" onClick={(e) => { e.preventDefault(); setScreen('login'); }}>로그인</a>
               </p>
             </form>
+          </section>
+        </main>
+      )}
+
+      {screen === 'postLogin' && (
+        <main className="page">
+          <section className="hero">
+            <p className="eyebrow">환영합니다</p>
+            <h1 className="title">로그인에 성공했습니다</h1>
+            <p className="lede">계속하려면 다음 중 하나를 선택하세요.</p>
+          </section>
+
+          <section className="card" aria-label="선택">
+            <div className="card-header">
+              <h2>다음 작업 선택</h2>
+              <p className="hint">정보 수정 또는 게임 시작을 선택할 수 있습니다.</p>
+            </div>
+
+            <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <button className="submit" onClick={openProfileForCurrentUser}>정보 수정</button>
+              <button className="submit" onClick={startGameForCurrentUser}>게임 시작</button>
+              <button className="submit" onClick={() => setScreen('signup')}>로그아웃</button>
+            </div>
           </section>
         </main>
       )}
@@ -480,7 +530,9 @@ function App() {
                     <div>
                       <div style={{ fontSize: 12, color: '#666' }}>소요 시간</div>
                       <div style={{ fontSize: 14, fontWeight: 500 }}>
-                        {playResult.duration_sec ? `${playResult.duration_sec}초` : '—'}
+                        {(playResult.duration_sec !== undefined && playResult.duration_sec !== null)
+                          ? `${playResult.duration_sec}초`
+                          : '—'}
                       </div>
                     </div>
                   </div>
@@ -488,20 +540,14 @@ function App() {
                   {/* 성과 */}
                   <div style={{ marginBottom: 24, paddingBottom: 16, borderBottom: '1px solid #eee' }}>
                     <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>성과</h3>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                      <div>
-                        <div style={{ fontSize: 12, color: '#666' }}>점수</div>
-                        <div style={{ fontSize: 20, fontWeight: 600, color: '#2ecc71' }}>
-                          {playResult.score !== undefined ? playResult.score.toLocaleString() : '—'}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
+                        <div>
+                          <div style={{ fontSize: 12, color: '#666' }}>점수</div>
+                          <div style={{ fontSize: 20, fontWeight: 600, color: '#2ecc71' }}>
+                            {playResult.score !== undefined ? playResult.score.toLocaleString() : '—'}
+                          </div>
                         </div>
                       </div>
-                      <div>
-                        <div style={{ fontSize: 12, color: '#666' }}>성공 여부</div>
-                        <div style={{ fontSize: 16, fontWeight: 500, color: playResult.success ? '#27ae60' : '#e74c3c' }}>
-                          {playResult.success !== undefined ? (playResult.success ? '성공 ✓' : '실패 ✕') : '—'}
-                        </div>
-                      </div>
-                    </div>
                   </div>
 
                   <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
