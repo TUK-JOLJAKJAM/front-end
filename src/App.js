@@ -1,24 +1,536 @@
-import logo from './logo.svg';
 import './App.css';
+import { useState } from 'react';
+
+function loadUsers() {
+  try {
+    const raw = localStorage.getItem('users');
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    console.error('Failed to load users', e);
+    return [];
+  }
+}
+
+function saveUsers(users) {
+  localStorage.setItem('users', JSON.stringify(users));
+}
+
+// Translate body_part and side to Korean
+function translateBodyPart(bodyPart, side) {
+  const bodyPartMap = {
+    'WRIST': '손목',
+    'SHOULDER': '어깨',
+    'WAIST': '허리',
+    'LEG': '다리',
+  };
+
+  const sideMap = {
+    'LEFT': '왼쪽',
+    'RIGHT': '오른쪽',
+    'BOTH': '양쪽',
+    'NONE': '',
+  };
+
+  const bp = (bodyPart || '').toString().toUpperCase().trim();
+  const sd = (side || '').toString().toUpperCase().trim();
+
+  const part = bodyPartMap[bp] || bodyPartMap[bodyPart] || bodyPart || '';
+  const sideStr = sideMap[sd] !== undefined ? sideMap[sd] : '';
+
+  return sideStr ? `${sideStr} ${part}` : part;
+}
 
 function App() {
+  const [screen, setScreen] = useState('signup');
+
+  // signup form fields
+  const [signup, setSignup] = useState({ name: '', personal_id: '', password: '', confirm: '', terms: false });
+  // profile form fields
+  const [profile, setProfile] = useState({ age: '', gender: '', height: '', weight: '', dominant_hand: '' });
+
+  // currently created user id after signup
+  const [currentUserId, setCurrentUserId] = useState(null);
+
+  // game play result data
+  const [playResult, setPlayResult] = useState(null);
+  // login form state
+  const [loginForm, setLoginForm] = useState({ personal_id: '', personal_pw: '' });
+
+  const handleSignupChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setSignup((s) => ({ ...s, [name]: type === 'checkbox' ? checked : value }));
+  };
+
+  const handleProfileChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setProfile((p) => ({ ...p, [name]: type === 'checkbox' ? checked : value }));
+  };
+
+  const handlePlayResultUpload = (event) => {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target.result);
+        setPlayResult(data);
+        console.log('Loaded play result:', data);
+      } catch (err) {
+        alert('JSON 파일을 읽을 수 없습니다: ' + err.message);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleLoginChange = (e) => {
+    const { name, value } = e.target;
+    setLoginForm((l) => ({ ...l, [name]: value }));
+  };
+
+  const handleLoginSubmit = (e) => {
+    e.preventDefault();
+    const users = loadUsers();
+    const found = users.find((u) => u.personal_id === loginForm.personal_id && u.personal_pw === loginForm.personal_pw);
+    if (!found) {
+      alert('아이디 또는 비밀번호가 일치하지 않습니다.');
+      return;
+    }
+    setCurrentUserId(found.user_id);
+    setLoginForm({ personal_id: '', personal_pw: '' });
+    setScreen('profile');
+  };
+
+  const handleSignupSubmit = (event) => {
+    event.preventDefault();
+
+    if (signup.password !== signup.confirm) {
+      alert('비밀번호와 확인이 일치하지 않습니다.');
+      return;
+    }
+
+    // Load existing users and create a new id
+    const users = loadUsers();
+    const nextId = users.length ? Math.max(...users.map((u) => u.user_id)) + 1 : 1;
+
+    // Build user object matching provided schema in attachment
+    const user = {
+      user_id: nextId,
+      personal_id: signup.personal_id || '',
+      personal_pw: signup.password || '',
+      age: null,
+      weight: null,
+      body_link: `/api/body/${nextId}`,
+      game_link: `/api/game/${nextId}`,
+    };
+
+    users.push(user);
+    saveUsers(users);
+
+    setCurrentUserId(nextId);
+    setScreen('profile');
+  };
+
+  const handleProfileSubmit = (event) => {
+    event.preventDefault();
+
+    if (!currentUserId) {
+      alert('계정이 생성되지 않았습니다. 다시 시도해주세요.');
+      return;
+    }
+
+    const users = loadUsers();
+    const idx = users.findIndex((u) => u.user_id === currentUserId);
+    if (idx === -1) {
+      alert('계정 정보를 찾을 수 없습니다.');
+      return;
+    }
+
+    // Update fields according to schema
+    users[idx].age = profile.age ? parseInt(profile.age, 10) : null;
+    users[idx].weight = profile.weight ? parseFloat(profile.weight) : null;
+    // Persist dominant hand
+    users[idx].dominant_hand = profile.dominant_hand || null;
+
+    saveUsers(users);
+
+    // For now show the result screen immediately (test data)
+    setScreen('result');
+  };
+
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <>
+      {screen === 'signup' && (
+        <main className="page">
+          <section className="hero">
+            <p className="eyebrow">치료와 게임의 만남</p>
+            <h1 className="title">환영합니다!</h1>
+            <p className="lede">
+              재미있는 게임 속에서 맞춤형 재활치료를 받으세요. 
+              당신의 회복 속도에 맞춘 프로그램이 기다리고 있습니다.
+            </p>
+            <ul className="benefits">
+              <li>진행 상황 분석과 실시간 피드백</li>
+              <li>개인 맞춤형 치료 프로토콜</li>
+            </ul>
+          </section>
+
+          <section className="card" aria-label="회원가입">
+            <div className="card-header">
+              <span className="badge">New</span>
+              <h2>회원가입</h2>
+              <p className="hint">회원님의 정보를 입력해주세요.</p>
+            </div>
+
+            <form className="form" onSubmit={handleSignupSubmit}>
+              <label className="field">
+                <span>이름</span>
+                <input
+                  type="text"
+                  name="name"
+                  placeholder="홍길동"
+                  required
+                  value={signup.name}
+                  onChange={handleSignupChange}
+                />
+              </label>
+
+              <label className="field">
+                <span>사용자 ID</span>
+                <input
+                  type="text"
+                  name="personal_id"
+                  placeholder="my_username"
+                  required
+                  value={signup.personal_id}
+                  onChange={handleSignupChange}
+                />
+              </label>
+
+              <div className="field-group">
+                <label className="field">
+                  <span>비밀번호</span>
+                  <input
+                    type="password"
+                    name="password"
+                    placeholder="••••••••"
+                    required
+                    value={signup.password}
+                    onChange={handleSignupChange}
+                  />
+                </label>
+
+                <label className="field">
+                  <span>비밀번호 확인</span>
+                  <input
+                    type="password"
+                    name="confirm"
+                    placeholder="••••••••"
+                    required
+                    value={signup.confirm}
+                    onChange={handleSignupChange}
+                  />
+                </label>
+              </div>
+
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  name="terms"
+                  required
+                  checked={signup.terms}
+                  onChange={handleSignupChange}
+                />
+                <span>
+                  이용약관과 개인정보 처리방침에 동의합니다
+                </span>
+              </label>
+
+              <button type="submit" className="submit">다음으로</button>
+
+              <p className="footnote">
+                이미 계정이 있나요? <a href="#login" onClick={(e) => { e.preventDefault(); setScreen('login'); }}>로그인</a>
+              </p>
+            </form>
+          </section>
+        </main>
+      )}
+
+      {screen === 'login' && (
+        <main className="page">
+          <section className="hero">
+            <p className="eyebrow">로그인</p>
+            <h1 className="title">계정으로 로그인</h1>
+            <p className="lede">계정 정보를 입력해 프로필 설정을 계속하세요.</p>
+          </section>
+
+          <section className="card" aria-label="로그인">
+            <div className="card-header">
+              <h2>로그인</h2>
+              <p className="hint">사용자 ID와 비밀번호를 입력하세요.</p>
+            </div>
+
+            <form className="form" onSubmit={handleLoginSubmit}>
+              <label className="field">
+                <span>사용자 ID</span>
+                <input
+                  type="text"
+                  name="personal_id"
+                  required
+                  value={loginForm.personal_id}
+                  onChange={handleLoginChange}
+                />
+              </label>
+
+              <label className="field">
+                <span>비밀번호</span>
+                <input
+                  type="password"
+                  name="personal_pw"
+                  required
+                  value={loginForm.personal_pw}
+                  onChange={handleLoginChange}
+                />
+              </label>
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="submit" type="submit">로그인</button>
+                <button className="submit" onClick={(e) => { e.preventDefault(); setScreen('signup'); }}>회원가입</button>
+              </div>
+            </form>
+          </section>
+        </main>
+      )}
+
+      {screen === 'profile' && (
+        <main className="page">
+          <section className="hero">
+            <p className="eyebrow">개인화 설정</p>
+            <h1 className="title">당신에게 맞는 치료를 준비중입니다</h1>
+            <p className="lede">
+              신체 정보를 입력하면 당신의 상태에 최적화된 
+              재활 게임 프로그램을 생성해드립니다.
+            </p>
+            <ul className="benefits">
+              <li>개인별 회복 목표 설정</li>
+              <li>난이도 자동 조절</li>
+            </ul>
+          </section>
+
+          <section className="card" aria-label="프로필 설정">
+            <div className="card-header">
+              <span className="badge">Step 2</span>
+              <h2>신체 정보 입력</h2>
+              <p className="hint">정확한 신체 정보로 더 효과적인 치료를 받으세요.</p>
+            </div>
+
+            <form className="form" onSubmit={handleProfileSubmit}>
+              <label className="field">
+                <span>나이</span>
+                <input
+                  type="number"
+                  name="age"
+                  placeholder="25"
+                  min="1"
+                  max="120"
+                  required
+                  value={profile.age}
+                  onChange={handleProfileChange}
+                />
+              </label>
+
+              <label className="field">
+                <span>성별</span>
+                <select
+                  name="gender"
+                  required
+                  className="select-field"
+                  value={profile.gender}
+                  onChange={handleProfileChange}
+                >
+                  <option value="">선택해주세요</option>
+                  <option value="male">남성</option>
+                  <option value="female">여성</option>
+                  <option value="other">기타</option>
+                </select>
+              </label>
+
+              <label className="field">
+                <span>우세손</span>
+                <div className="dominant-hand" style={{ marginTop: 8 }}>
+                  <label>
+                    <input
+                      type="radio"
+                      name="dominant_hand"
+                      value="left"
+                      checked={profile.dominant_hand === 'left'}
+                      onChange={handleProfileChange}
+                      required
+                    />
+                    <span>왼손</span>
+                  </label>
+
+                  <label>
+                    <input
+                      type="radio"
+                      name="dominant_hand"
+                      value="right"
+                      checked={profile.dominant_hand === 'right'}
+                      onChange={handleProfileChange}
+                    />
+                    <span>오른손</span>
+                  </label>
+                </div>
+              </label>
+
+              <div className="field-group">
+                <label className="field">
+                  <span>키 (cm)</span>
+                  <input
+                    type="number"
+                    name="height"
+                    placeholder="170"
+                    min="50"
+                    max="250"
+                    step="0.1"
+                    required
+                    value={profile.height}
+                    onChange={handleProfileChange}
+                  />
+                </label>
+
+                <label className="field">
+                  <span>체중 (kg)</span>
+                  <input
+                    type="number"
+                    name="weight"
+                    placeholder="70"
+                    min="20"
+                    max="500"
+                    step="0.1"
+                    required
+                    value={profile.weight}
+                    onChange={handleProfileChange}
+                  />
+                </label>
+              </div>
+
+              <button type="submit" className="submit">시작하기</button>
+
+              <p className="footnote">
+                <a href="#back" onClick={(e) => { e.preventDefault(); setScreen('signup'); }}>이전으로 돌아가기</a>
+              </p>
+            </form>
+          </section>
+        </main>
+      )}
+
+      {screen === 'result' && (
+        <main className="page">
+          <section className="hero">
+            <p className="eyebrow">게임 결과</p>
+            <h1 className="title">오늘의 진행도</h1>
+            <p className="lede">한 판 플레이 후의 진척도를 확인하세요.</p>
+          </section>
+
+          <section className="card" aria-label="게임 결과">
+            <div className="card-header">
+              <h2>{playResult ? '게임 결과 상세' : '게임 결과 업로드'}</h2>
+              <p className="hint">{playResult ? '게임 실행 결과를 확인하세요.' : '게임 결과 JSON 파일을 업로드하세요.'}</p>
+            </div>
+
+            <div style={{ padding: '16px' }}>
+              {!playResult ? (
+                <div>
+                  <label style={{ display: 'block', marginBottom: 16 }}>
+                    <span style={{ display: 'block', marginBottom: 8, fontWeight: 600 }}>결과 파일 업로드</span>
+                    <input
+                      type="file"
+                      accept=".json"
+                      onChange={handlePlayResultUpload}
+                      style={{
+                        display: 'block',
+                        padding: '8px',
+                        border: '1px solid #ccc',
+                        borderRadius: '4px',
+                        width: '100%',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </label>
+                  <p style={{ fontSize: 14, color: '#888', marginTop: 12 }}>
+                    게임 실행 후 생성된 JSON 파일을 선택하면 상세한 결과를 볼 수 있습니다.
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  {/* 대상 부위 */}
+                  <div style={{ marginBottom: 24, paddingBottom: 16, borderBottom: '1px solid #eee' }}>
+                    <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>대상 부위</h3>
+                    <div>
+                        <div className="body-part-translation">
+                          {translateBodyPart(playResult.body_part, playResult.side) || '—'}
+                        </div>
+                      </div>
+                  </div>
+
+                  {/* 플레이 시간 */}
+                  <div style={{ marginBottom: 24, paddingBottom: 16, borderBottom: '1px solid #eee' }}>
+                    <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>플레이 시간</h3>
+                    <div>
+                      <div style={{ fontSize: 12, color: '#666' }}>소요 시간</div>
+                      <div style={{ fontSize: 14, fontWeight: 500 }}>
+                        {playResult.duration_sec ? `${playResult.duration_sec}초` : '—'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 성과 */}
+                  <div style={{ marginBottom: 24, paddingBottom: 16, borderBottom: '1px solid #eee' }}>
+                    <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>성과</h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                      <div>
+                        <div style={{ fontSize: 12, color: '#666' }}>점수</div>
+                        <div style={{ fontSize: 20, fontWeight: 600, color: '#2ecc71' }}>
+                          {playResult.score !== undefined ? playResult.score.toLocaleString() : '—'}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 12, color: '#666' }}>성공 여부</div>
+                        <div style={{ fontSize: 16, fontWeight: 500, color: playResult.success ? '#27ae60' : '#e74c3c' }}>
+                          {playResult.success !== undefined ? (playResult.success ? '성공 ✓' : '실패 ✕') : '—'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+                    <button
+                      className="submit"
+                      onClick={() => {
+                        setPlayResult(null);
+                      }}
+                    >
+                      다시 업로드
+                    </button>
+                    <button
+                      className="submit"
+                      onClick={() => {
+                        setPlayResult(null);
+                        setScreen('profile');
+                      }}
+                    >
+                      다시하기
+                    </button>
+                    <button className="submit" onClick={() => setScreen('signup')}>홈으로</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+        </main>
+      )}
+    </>
   );
 }
 

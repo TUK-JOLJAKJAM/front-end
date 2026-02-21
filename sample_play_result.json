@@ -1,0 +1,19 @@
+{
+  "session_id": "550e8400-e29b-41d4-a716-446655440000",
+  "user_id": "660e8400-e29b-41d4-a716-446655440000",
+  "device_id": "prod-001",
+  "game_id": "BALANCE_01",
+  "started_at_ms": 1708420200000,
+  "ended_at_ms": 1708420620000,
+  "duration_sec": 420,
+  "difficulty_level": 3,
+  "weight_module_g": 500,
+  "body_part": "WAIST",
+  "side": "NONE",
+  "pain_before_0_10": 3,
+  "pain_after_0_10": 4,
+  "fatigue_after_0_10": 5,
+  "score": 12800,
+  "success": true,
+  "client_build": "unity-0.3.2"
+}
