@@ -1,8 +1,50 @@
 const http = require('http');
 const fs = require('fs');
+const path = require('path');
 
-// 실제 게임 결과 파일 경로 (Windows)
+/************************************ 
+ 실제 게임 결과 파일 경로로 변경하세요
+ 예시 경로: C:\\Users\\zsxcd\\AppData\\LocalLow\\ReFit\\Refit_Demo\\WoodGameData.json
+************************************/
 const FILE_PATH = 'C:\\Users\\zsxcd\\AppData\\LocalLow\\ReFit\\Refit_Demo\\WoodGameData.json';
+/************************************ 
+ 실제 게임 실행 파일 경로 설정
+ - 우선순위: 환경변수(DEFAULT_EXE 또는 EXE_PATH) -> exe-config.json 파일(현재 비활성) -> 기본값(FALLBACK)
+ - exe-config.json 예시(동일 폴더에 생성):
+   { "default_exe": "C:\\path\\to\\game.exe", "profile_exe": "C:\\..." }
+ - 단일 문자열을 파일에 썼을 경우 ("C:\\path\\to\\game.exe")에도 대응합니다.
+************************************/
+const CONFIG_FILE = path.join(__dirname, 'exe-config.json');
+let EXE_PATHS = {};
+const DEFAULT_EXE_FALLBACK = 'C:\\Users\\zsxcd\\Downloads\\ReFit_Demo_Arduino_Com6\\ReFit_Demo.exe';
+
+// Load from environment first
+if (process.env.DEFAULT_EXE) {
+  EXE_PATHS = { default_exe: process.env.DEFAULT_EXE };
+} else if (process.env.EXE_PATH) {
+  EXE_PATHS = { default_exe: process.env.EXE_PATH };
+} else {
+  // exe-config.json 로드 부분은 주석 처리(비활성화)되어 있습니다.
+  // 필요 시 아래 코드를 활성화하세요.
+  /*
+  try {
+    if (fs.existsSync(CONFIG_FILE)) {
+      const raw = fs.readFileSync(CONFIG_FILE, 'utf8').trim();
+      const parsed = JSON.parse(raw);
+      if (typeof parsed === 'string') EXE_PATHS = { default_exe: parsed };
+      else if (parsed && typeof parsed === 'object') EXE_PATHS = parsed;
+      else EXE_PATHS = { default_exe: DEFAULT_EXE_FALLBACK };
+    } else {
+      EXE_PATHS = { default_exe: DEFAULT_EXE_FALLBACK };
+    }
+  } catch (e) {
+    console.warn('Could not load exe-config.json, using fallback', e.message);
+    EXE_PATHS = { default_exe: DEFAULT_EXE_FALLBACK };
+  }
+  */
+  EXE_PATHS = { default_exe: DEFAULT_EXE_FALLBACK };
+}
+
 const PORT = process.env.PORT || 4000;
 
 const server = http.createServer((req, res) => {
@@ -30,6 +72,13 @@ const server = http.createServer((req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json', ...headers });
       res.end(data);
     });
+    return;
+  }
+
+  // Provide configuration (exe paths) to the frontend so paths are not hardcoded.
+  if (req.method === 'GET' && req.url === '/config') {
+    res.writeHead(200, { 'Content-Type': 'application/json', ...headers });
+    res.end(JSON.stringify(EXE_PATHS));
     return;
   }
 
@@ -97,3 +146,4 @@ server.listen(PORT, () => {
   console.log(`local-server listening on http://localhost:${PORT}/woodgame`);
   console.log(`serving file: ${FILE_PATH}`);
 });
+
