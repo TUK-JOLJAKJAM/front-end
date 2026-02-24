@@ -55,6 +55,8 @@ function App() {
   const [playResult, setPlayResult] = useState(null);
   // login form state
   const [loginForm, setLoginForm] = useState({ personal_id: '', personal_pw: '' });
+  // server-provided configuration (exe paths etc.)
+  const [serverConfig, setServerConfig] = useState(null);
 
   const handleSignupChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -66,43 +68,89 @@ function App() {
     setProfile((p) => ({ ...p, [name]: type === 'checkbox' ? checked : value }));
   };
 
-  const handlePlayResultUpload = (event) => {
-    const file = event.target.files && event.target.files[0];
-    if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = JSON.parse(e.target.result);
-        setPlayResult(data);
-        console.log('Loaded play result:', data);
-      } catch (err) {
-        alert('JSON 파일을 읽을 수 없습니다: ' + err.message);
-      }
-    };
-    reader.readAsText(file);
-  };
 
   // Try to auto-load play result from a fixed local path when entering result screen.
-  // 자신의 파일 경로로 설정하세요
-  const DEFAULT_PLAY_RESULT_PATH = 'file:///C:/Users/zsxcd/AppData/LocalLow/ReFit/Refit_Demo/WoodGameData.json';
-  useEffect(() => {
-    if (screen !== 'result') return;
+  // 개발용: 로컬 서버에서 최신 AppData 파일을 제공합니다
+  const DEFAULT_PLAY_RESULT_PATH = 'http://localhost:4000/woodgame';
+  // 자동 로드를 비활성화했습니다 — '결과보기' 버튼으로만 파일을 불러옵니다.
 
-    // attempt to fetch the file via file:// URL (may be blocked by browser security)
-    (async () => {
+  // Manual loader triggered by "결과보기" button
+  const loadDefaultPlayResult = async () => {
+    try {
+      const res = await fetch(DEFAULT_PLAY_RESULT_PATH);
+      if (!res.ok) throw new Error('파일을 불러올 수 없습니다: ' + res.status);
+      const data = await res.json();
+      setPlayResult(data);
+      console.log('Loaded play result from default path (button):', DEFAULT_PLAY_RESULT_PATH);
+    } catch (err) {
+      console.warn('결과 로드 실패:', err.message);
+        alert('결과 파일을 불러오지 못했습니다. 로컬 서버가 실행 중인지 확인하세요 (node local-server.js).');
+    }
+  };
+
+  // Load server config (exe paths) once on mount
+  useEffect(() => {
+    let canceled = false;
+    const loadConfig = async () => {
       try {
-        const res = await fetch(DEFAULT_PLAY_RESULT_PATH);
-        if (!res.ok) throw new Error('파일을 불러올 수 없습니다: ' + res.status);
-        const data = await res.json();
-        setPlayResult(data);
-        console.log('Auto-loaded play result from default path:', DEFAULT_PLAY_RESULT_PATH);
-      } catch (err) {
-        console.warn('자동 로드 실패:', err.message);
-        // leave playResult as is and let user upload manually
+        const res = await fetch('http://localhost:4000/config');
+        if (!res.ok) return;
+        const raw = await res.json();
+        // Normalize string -> { default_exe: string }
+        const cfg = typeof raw === 'string' ? { default_exe: raw } : raw;
+        if (!canceled) setServerConfig(cfg);
+      } catch (e) {
+        console.warn('Could not load server config', e.message);
       }
-    })();
-  }, [screen]);
+    };
+    loadConfig();
+    return () => { canceled = true; };
+  }, []);
+
+  // Launch an exe via local server. If `exePath` is omitted, try server-provided default.
+  const launchExe = async (exePath, args = []) => {
+    try {
+      let pathToUse = exePath;
+      if (!pathToUse) {
+        if (serverConfig && serverConfig.default_exe) {
+          pathToUse = serverConfig.default_exe;
+        } else {
+          // try to fetch config on demand
+          try {
+            const res = await fetch('http://localhost:4000/config');
+              if (res.ok) {
+                const rawCfg = await res.json();
+                const cfg = typeof rawCfg === 'string' ? { default_exe: rawCfg } : rawCfg;
+                setServerConfig(cfg);
+                pathToUse = cfg.default_exe;
+              }
+          } catch (e) {
+            // ignore
+          }
+        }
+      }
+
+      if (!pathToUse) {
+        alert('실행 파일 경로가 설정되지 않았습니다. 서버의 /config를 확인하세요.');
+        return false;
+      }
+
+      const res = await fetch('http://localhost:4000/launch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: pathToUse, args }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json && json.message ? json.message : 'launch failed');
+      console.log('launched exe', pathToUse);
+      return true;
+    } catch (e) {
+      console.error('launch failed', e.message);
+      alert('실행에 실패했습니다: ' + e.message);
+      return false;
+    }
+  };
 
   const handleLoginChange = (e) => {
     const { name, value } = e.target;
@@ -147,6 +195,14 @@ function App() {
     // clear any previous play result and go to result screen (placeholder for actual game)
     setPlayResult(null);
     setScreen('result');
+    // 게임 실행
+
+    /**********************************************************
+    개발용: exe 경로를 실제 게임 실행 파일 경로로 변경하세요
+    예시 경로: C:\Users\zsxcd\Downloads\ReFit_Demo_CustomSave\ReFit_Demo.exe
+    ***********************************************************/
+      // Use server-configured exe path
+      launchExe();
   };
 
   const handleSignupSubmit = (event) => {
@@ -204,6 +260,8 @@ function App() {
 
     // For now show the result screen immediately (test data)
     setScreen('result');
+    // launch the game exe after profile submit (server provides path)
+      launchExe();
   };
 
   return (
@@ -500,38 +558,32 @@ function App() {
         <main className="page">
           <section className="hero">
             <p className="eyebrow">게임 결과</p>
-            <h1 className="title">오늘의 진행도</h1>
-            <p className="lede">한 판 플레이 후의 진척도를 확인하세요.</p>
+            <h1 className="title">수고 하셨습니다!</h1>
+            <p className="lede">결과 보기 버튼을 눌러 상세 결과를 확인해보세요.</p>
           </section>
 
           <section className="card" aria-label="게임 결과">
             <div className="card-header">
-              <h2>{playResult ? '게임 결과 상세' : '게임 결과 업로드'}</h2>
-              <p className="hint">{playResult ? '게임 실행 결과를 확인하세요.' : '게임 결과 JSON 파일을 업로드하세요.'}</p>
+              <h2>{playResult ? '게임 결과 상세' : '저장한 게임 결과를 확인하세요'}</h2>
+              <p className="hint">{playResult ? '게임 실행 결과를 확인하세요.' : ''}</p>
             </div>
 
             <div style={{ padding: '16px' }}>
               {!playResult ? (
-                <div>
-                  <label style={{ display: 'block', marginBottom: 16 }}>
-                    <span style={{ display: 'block', marginBottom: 8, fontWeight: 600 }}>결과 파일 업로드</span>
-                    <input
-                      type="file"
-                      accept=".json"
-                      onChange={handlePlayResultUpload}
-                      style={{
-                        display: 'block',
-                        padding: '8px',
-                        border: '1px solid #ccc',
-                        borderRadius: '4px',
-                        width: '100%',
-                        boxSizing: 'border-box',
-                      }}
-                    />
-                  </label>
-                  <p style={{ fontSize: 14, color: '#888', marginTop: 12 }}>
-                    게임 실행 후 생성된 JSON 파일을 선택하면 상세한 결과를 볼 수 있습니다.
-                  </p>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="submit" onClick={loadDefaultPlayResult}>결과보기</button>
+                  <button
+                    className="submit"
+                    onClick={async () => {
+                      // launch exe (server-provided path), then go to profile
+                      await launchExe();
+                      setPlayResult(null);
+                      setScreen('profile');
+                    }}
+                  >
+                    다시하기
+                  </button>
+                  <button className="submit" onClick={() => setScreen('signup')}>홈으로</button>
                 </div>
               ) : (
                 <div>
