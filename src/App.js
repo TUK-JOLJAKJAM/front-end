@@ -1,6 +1,39 @@
 import './App.css';
 import { useState, useEffect } from 'react';
 
+const API_BASE = 'http://43.200.20.216/api/v1';
+
+async function sendPlayResultToServer(playResult, userId = null) {
+  const url = `${API_BASE}/game-result`; // 백엔드 엔드포인트를 실제값으로 바꾸세요
+  const body = {
+    userId,
+    timestamp: new Date().toISOString(),
+    ...playResult,
+  };
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.warn('백엔드 게임 결과 저장 실패', res.status, errorText);
+      return false;
+    }
+
+    console.log('백엔드 게임 결과 저장 성공', await res.json());
+    return true;
+  } catch (err) {
+    console.warn('백엔드 게임 결과 저장 중 예외', err.message);
+    return false;
+  }
+}
+
 function loadUsers() {
   try {
     const raw = localStorage.getItem('users');
@@ -83,6 +116,9 @@ function App() {
       const data = await res.json();
       setPlayResult(data);
       console.log('Loaded play result from default path (button):', DEFAULT_PLAY_RESULT_PATH);
+
+      // 결과를 백엔드 DB에도 전송
+      await sendPlayResultToServer(data, currentUserId);
     } catch (err) {
       console.warn('결과 로드 실패:', err.message);
         alert('결과 파일을 불러오지 못했습니다. 로컬 서버가 실행 중인지 확인하세요 (node local-server.js).');
