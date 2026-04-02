@@ -79,7 +79,7 @@ function App() {
   // signup form fields
   const [signup, setSignup] = useState({ name: '', personal_id: '', password: '', confirm: '', terms: false });
   // profile form fields
-  const [profile, setProfile] = useState({ age: '', gender: '', height: '', weight: '', dominant_hand: '' });
+  const [profile, setProfile] = useState({ birth_year: '', gender: '', height_cm: '', weight_kg: '', dominant_hand: '', diagnosis_tags: '', pain_baseline_0_10: '0', notes: '' });
 
   // currently created user id after signup
   const [currentUserId, setCurrentUserId] = useState(null);
@@ -217,11 +217,14 @@ function App() {
       setProfile({ age: '', gender: '', height: '', weight: '', dominant_hand: '' });
     } else {
       setProfile({
-        age: u.age !== null && u.age !== undefined ? String(u.age) : '',
+        birth_year: u.birth_year !== null && u.birth_year !== undefined ? String(u.birth_year) : '',
         gender: u.gender || '',
-        height: u.height !== null && u.height !== undefined ? String(u.height) : '',
-        weight: u.weight !== null && u.weight !== undefined ? String(u.weight) : '',
+        height_cm: u.height_cm !== null && u.height_cm !== undefined ? String(u.height_cm) : '',
+        weight_kg: u.weight_kg !== null && u.weight_kg !== undefined ? String(u.weight_kg) : '',
         dominant_hand: u.dominant_hand || '',
+        diagnosis_tags: u.diagnosis_tags || '',
+        pain_baseline_0_10: u.pain_baseline_0_10 !== null && u.pain_baseline_0_10 !== undefined ? String(u.pain_baseline_0_10) : '0',
+        notes: u.notes || '',
       });
     }
     setScreen('profile');
@@ -287,8 +290,14 @@ function App() {
     }
 
     // Update fields according to schema
-    users[idx].age = profile.age ? parseInt(profile.age, 10) : null;
-    users[idx].weight = profile.weight ? parseFloat(profile.weight) : null;
+    users[idx].birth_year = profile.birth_year ? parseInt(profile.birth_year, 10) : null;
+    users[idx].gender = profile.gender || null;
+    users[idx].height_cm = profile.height_cm ? parseFloat(profile.height_cm) : null;
+    users[idx].weight_kg = profile.weight_kg ? parseFloat(profile.weight_kg) : null;
+    users[idx].disease_code = profile.disease_code || null;
+    users[idx].diagnosis_tags = profile.diagnosis_tags || null;
+    users[idx].pain_baseline_0_10 = profile.pain_baseline_0_10 ? parseInt(profile.pain_baseline_0_10, 10) : 0;
+    users[idx].notes = profile.notes || null;
     // Persist dominant hand
     users[idx].dominant_hand = profile.dominant_hand || null;
 
@@ -491,15 +500,15 @@ function App() {
 
             <form className="form" onSubmit={handleProfileSubmit}>
               <label className="field">
-                <span>나이</span>
+                <span>태어난 년도</span>
                 <input
                   type="number"
-                  name="age"
-                  placeholder="25"
-                  min="1"
-                  max="120"
+                  name="birth_year"
+                  placeholder="1990"
+                  min="1900"
+                  max={new Date().getFullYear()}
                   required
-                  value={profile.age}
+                  value={profile.birth_year}
                   onChange={handleProfileChange}
                 />
               </label>
@@ -546,6 +555,31 @@ function App() {
                     <span>오른손</span>
                   </label>
                 </div>
+              </label>
+
+              <label className="field">
+                <span>질병 코드</span>
+                <input
+                  type="text"
+                  name="disease_code"
+                  placeholder="예: M54.5"
+                  value={profile.disease_code}
+                  onChange={handleProfileChange}
+                />
+              </label>
+
+              <label className="field">
+                <span>평소 통증 (0~10)</span>
+                <select
+                  name="pain_baseline"
+                  required
+                  value={profile.pain_baseline}
+                  onChange={handleProfileChange}
+                >
+                  {Array.from({ length: 11 }, (_, idx) => (
+                    <option key={idx} value={idx}>{idx}</option>
+                  ))}
+                </select>
               </label>
 
               <div className="field-group">
