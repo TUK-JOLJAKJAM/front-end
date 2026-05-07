@@ -3,50 +3,59 @@ React 앱입니다. Create React App으로 부트스트랩되었습니다.
 
 ## 빠른 시작
 
-의존성 설치:
+### 1. 의존성 설치
+프로젝트 경로에서 터미널을 열고:
 ```bash
 npm install
 ```
 
-개발 서버 실행:
+### 2. 로컬 서버 실행 (게임 결과 및 exe 실행용)
+별도의 터미널에서:
+```bash
+node local-server.js
+```
+- 이 서버는 `http://localhost:4000`에서 게임 결과 JSON을 제공합니다.
+- 게임 실행 파일 경로도 이 서버를 통해 설정됩니다.
+
+### 3. 백엔드 API 서버 확인
+- 백엔드 서버가 `http://43.200.20.216`에서 실행 중이어야 합니다.
+- 회원가입/로그인/프로필 저장 기능이 이 서버를 사용합니다.
+- Swagger 문서: `http://43.200.20.216/swagger-ui/index.html#/`
+
+### 4. 프론트엔드 개발 서버 실행
+1.에서 생성한 터미널에서:
 ```bash
 npm start
 ```
+- 브라우저에서 `http://localhost:3000` 접속
+- 회원가입 → 프로필 입력 → 게임 실행 → 결과 보기 순서로 테스트 가능
 
-프로덕션 빌드:
+## 기능 설명
+- **회원가입/로그인**: 백엔드 API를 통해 사용자 인증
+- **프로필 관리**: 키, 체중, 우세손, 질병코드, 통증 정도 등 입력
+- **게임 실행**: 로컬 exe 파일 실행
+- **결과 보기**: 게임 결과를 로드하고 백엔드에 저장
+
+## 설정 변경
+- **백엔드 API 주소**: `src/App.js`의 `API_BASE` 변수 수정
+- **게임 결과 파일 경로**: `local-server.js`의 `FILE_PATH` 수정 또는 `process.env.FILE_PATH` 설정
+- **게임 exe 경로**: `local-server.js`의 `DEFAULT_EXE_FALLBACK` 수정 또는 `process.env.DEFAULT_EXE`/`process.env.EXE_PATH` 설정
+- **파일/실행파일 선택**: `GET /choose-file` 또는 `GET /choose-exe`로 Windows 파일 선택 대화상자에서 경로 선택 가능
+
+## 프로덕션 빌드
 ```bash
 npm run build
 ```
 
-테스트 실행:
+## 테스트
 ```bash
 npm test
 ```
 
-## 주의
-- 정확한 의존성 버전 관리를 위해 `package-lock.json`을 함께 올려두는 것이 좋습니다.
-
-## 배포 관련
-CI/배포 환경에서는 `npm ci`로 잠금된 버전대로 설치하는 것을 권장합니다.
-
-## 로컬 개발용: 결과 파일 및 게임 실행 파일 설정
-
-이 저장소는 프론트엔드와 별도로 로컬에서 실행되는 `local-server.js`를 통해
-게임 결과(JSON) 파일과 게임 실행(.exe)을 연결하도록 설계되어 있습니다.
-
-요약 (현재 동작)
-- 프론트엔드(`src/App.js`)는 결과를 `http://localhost:4000/woodgame`에서 가져옵니다.
-- 프론트엔드는 실행 파일 경로를 서버의 `/config`에서 읽어옵니다. `/config`는 현재 구조상 객체형태로 `{ default_exe: 'C:\\...' }`를 반환합니다.
-- `local-server.js`는 exe 경로를 설정하는 우선순위를 지원합니다: 환경변수(`DEFAULT_EXE`/`EXE_PATH`) -> (비활성) `exe-config.json` 파일 -> 코드 내 fallback 값.
-
-설정 방법
-1. 결과 JSON 파일 경로 설정
-	- `local-server.js`의 `FILE_PATH` 상수를 실제 결과 JSON 파일 경로로 설정합니다.
-	- 예시 경로: `C:\\Users\\zsxcd\\AppData\\LocalLow\\ReFit\\Refit_Demo\\WoodGameData.json`
-
-2. exe 경로 설정 (권장: 환경변수)
-	- `local-server.js`의 `DEFAULT_EXE_FALLBACK` 상수를 실제 exe 파일 경로로 설정합니다.
-	- 예시 경로: `C:\\Users\\zsxcd\\Downloads\\ReFit_Demo_Arduino_Com6\\ReFit_Demo.exe`
+## 주의사항
+- 백엔드 서버가 실행 중이어야 정상 동작합니다.
+- 게임 파일 경로는 실제 환경에 맞게 설정하세요.
+- 정확한 의존성 버전 관리를 위해 `package-lock.json`을 함께 사용하세요.
 
 실행
 ```powershell
