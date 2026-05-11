@@ -5,7 +5,8 @@ const fs = require('fs');
  실제 게임 결과 파일 경로로 변경하세요
  예시 경로: C:\Users\zsxcd\AppData\LocalLow\ReFit\Refit_Demo\WoodGameData.json
 ************************************/
-const FILE_PATH = 'C:\\Users\\zsxcd\\AppData\\LocalLow\\ReFit\\Refit_Demo\\WoodGameData.json';
+const DEFAULT_FILE_PATH = 'C:\\Users\\zsxcd\\AppData\\LocalLow\\ReFit\\Refit_Demo\\WoodGameData.json';
+let FILE_PATH = process.env.FILE_PATH || DEFAULT_FILE_PATH;
 /************************************ 
  실제 게임 실행 파일 경로 설정
  - 우선순위: 환경변수(DEFAULT_EXE 또는 EXE_PATH) -> exe-config.json 파일 -> 기본값(FALLBACK)
@@ -46,6 +47,69 @@ if (process.env.DEFAULT_EXE) {
   // 현재는 파일 로드를 건너뛰고 기본 경로를 사용합니다.
   EXE_PATHS = { default_exe: DEFAULT_EXE_FALLBACK };
 }
+function openWindowsFileDialog(filter = 'JSON 파일 (*.json)|*.json|모든 파일 (*.*)|*.*') {
+  const psScript = `
+    Add-Type -AssemblyName System.Windows.Forms;
+    Add-Type -AssemblyName System.Drawing;
+    # 부모 폼 생성 (매우 작고 투명하게)
+    $form = New-Object System.Windows.Forms.Form;
+    $form.TopMost = $true;
+    $form.ShowInTaskbar = $false;
+    $form.Opacity = 0.01;
+    $form.Width = 1;
+    $form.Height = 1;
+    $form.StartPosition = 'CenterScreen';
+    $form.FormBorderStyle = 'None';
+    $form.WindowState = 'Minimized';  # 최소화 상태로 시작
+    # 폼 표시
+    $form.Show();
+    $form.WindowState = 'Normal';
+    $form.BringToFront();
+    $form.Activate();
+    $form.TopMost = $true;
+    # 잠시 대기해서 폼이 최상위로 오도록
+    Start-Sleep -Milliseconds 100;
+    # OpenFileDialog 생성 및 표시
+    $ofd = New-Object System.Windows.Forms.OpenFileDialog;
+    $ofd.Filter = '${filter}';
+    $ofd.InitialDirectory = [Environment]::GetFolderPath('Desktop');
+    $ofd.Multiselect = $false;
+    $result = $ofd.ShowDialog($form);
+    $form.Close();
+    if ($result -eq 'OK') {
+      Write-Output $ofd.FileName
+    }
+  `;
+  return new Promise((resolve, reject) => {
+    const { spawn } = require('child_process');
+    const child = spawn('powershell.exe', ['-NoProfile', '-Command', psScript], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    let output = '';
+    let error = '';
+
+    child.stdout.on('data', (chunk) => { output += chunk.toString(); });
+    child.stderr.on('data', (chunk) => { error += chunk.toString(); });
+
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve(output.trim());
+      } else {
+        reject(new Error(error.trim() || `PowerShell exited with ${code}`));
+      }
+    });
+  });
+}
+
+function updateExePath(newPath) {
+  EXE_PATHS = { default_exe: newPath };
+}
+
+function updateFilePath(newPath) {
+  FILE_PATH = newPath;
+}
+
 const PORT = process.env.PORT || 4000;
 
 const server = http.createServer((req, res) => {
@@ -76,10 +140,66 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+ if (req.method === 'GET' && req.url === '/choose-file') {
+    openWindowsFileDialog('JSON 파일 (*.json)|*.json|모든 파일 (*.*)|*.*')
+      .then((selectedPath) => {
+        if (!selectedPath) {
+          res.writeHead(400, { 'Content-Type': 'application/json', ...headers });
+          res.end(JSON.stringify({ error: 'file selection canceled' }));
+          return;
+        }
+        updateFilePath(selectedPath);
+        res.writeHead(200, { 'Content-Type': 'application/json', ...headers });
+        res.end(JSON.stringify({ ok: true, file_path: FILE_PATH }));
+      })
+      .catch((err) => {
+        res.writeHead(500, { 'Content-Type': 'application/json', ...headers });
+        res.end(JSON.stringify({ error: 'failed to choose file', message: err.message }));
+      });
+    return;
+  }
+
+  if (req.method === 'GET' && req.url === '/choose-exe') {
+    openWindowsFileDialog('Executable (*.exe)|*.exe|모든 파일 (*.*)|*.*')
+      .then((selectedPath) => {
+        if (!selectedPath) {
+          res.writeHead(400, { 'Content-Type': 'application/json', ...headers });
+          res.end(JSON.stringify({ error: 'exe selection canceled' }));
+          return;
+        }
+        updateExePath(selectedPath);
+        res.writeHead(200, { 'Content-Type': 'application/json', ...headers });
+        res.end(JSON.stringify({ ok: true, exe_path: EXE_PATHS.default_exe }));
+      })
+      .catch((err) => {
+        res.writeHead(500, { 'Content-Type': 'application/json', ...headers });
+        res.end(JSON.stringify({ error: 'failed to choose exe', message: err.message }));
+      });
+    return;
+  }
+
+  if (req.method === 'POST' && req.url === '/config') {
+    let body = '';
+    req.on('data', (chunk) => { body += chunk.toString(); if (body.length > 1e6) req.socket.destroy(); });
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        if (payload.file_path) updateFilePath(payload.file_path);
+        if (payload.exe_path) updateExePath(payload.exe_path);
+        res.writeHead(200, { 'Content-Type': 'application/json', ...headers });
+        res.end(JSON.stringify({ ok: true, file_path: FILE_PATH, exe_path: EXE_PATHS.default_exe }));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json', ...headers });
+        res.end(JSON.stringify({ error: 'invalid json', message: err.message }));
+      }
+    });
+    return;
+  }
+
   // Provide configuration (exe paths) to the frontend so paths are not hardcoded.
   if (req.method === 'GET' && req.url === '/config') {
     res.writeHead(200, { 'Content-Type': 'application/json', ...headers });
-    res.end(JSON.stringify(EXE_PATHS));
+    res.end(JSON.stringify({ file_path: FILE_PATH, exe_paths: EXE_PATHS }));
     return;
   }
 
