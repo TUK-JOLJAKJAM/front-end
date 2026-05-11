@@ -1,6 +1,40 @@
 import './App.css';
 import { useState, useEffect } from 'react';
 
+const API_BASE = 'http://43.200.20.216/api/v1';
+const LOCAL_SERVER_BASE = 'http://localhost:4000';
+
+async function sendPlayResultToServer(playResult, userId = null) {
+  const url = `${API_BASE}/game-result`; // 백엔드 엔드포인트를 실제값으로 바꾸세요
+  const body = {
+    userId,
+    timestamp: new Date().toISOString(),
+    ...playResult,
+  };
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.warn('백엔드 게임 결과 저장 실패', res.status, errorText);
+      return false;
+    }
+
+    console.log('백엔드 게임 결과 저장 성공', await res.json());
+    return true;
+  } catch (err) {
+    console.warn('백엔드 게임 결과 저장 중 예외', err.message);
+    return false;
+  }
+}
+
 function loadUsers() {
   try {
     const raw = localStorage.getItem('users');
@@ -46,7 +80,7 @@ function App() {
   // signup form fields
   const [signup, setSignup] = useState({ name: '', personal_id: '', password: '', confirm: '', terms: false });
   // profile form fields
-  const [profile, setProfile] = useState({ age: '', gender: '', height: '', weight: '', dominant_hand: '' });
+  const [profile, setProfile] = useState({ birth_year: '', gender: '', height_cm: '170', weight_kg: '70', dominant_hand: '', diagnosis_tags: '', pain_baseline_0_10: '0', notes: '' });
 
   // currently created user id after signup
   const [currentUserId, setCurrentUserId] = useState(null);
@@ -55,8 +89,9 @@ function App() {
   const [playResult, setPlayResult] = useState(null);
   // login form state
   const [loginForm, setLoginForm] = useState({ personal_id: '', personal_pw: '' });
-  // server-provided configuration (exe paths etc.)
-  const [serverConfig, setServerConfig] = useState(null);
+  // server-provided configuration (exe paths, file path 등)
+  const [serverConfig, setServerConfig] = useState({ file_path: '', default_exe: '', exe_paths: null });
+  const [localServerReady, setLocalServerReady] = useState(false);
 
   const handleSignupChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -68,40 +103,75 @@ function App() {
     setProfile((p) => ({ ...p, [name]: type === 'checkbox' ? checked : value }));
   };
 
+  const fetchLocalApi = async (path, options) => {
+    const url = `${LOCAL_SERVER_BASE}${path}`;
+    const res = await fetch(url, options);
+    if (!res.ok) {
+      const payload = await res.json().catch(() => ({}));
+      throw new Error(payload.message || payload.error || `local server ${path} failed`);
+    }
+    return res.json().catch(() => ({}));
+  };
 
+  const refreshLocalServerConfig = async () => {
+    try {
+      const raw = await fetchLocalApi('/config');
+      const cfg = normalizeServerConfig(raw);
+      setServerConfig(cfg);
+      setLocalServerReady(true);
+      return cfg;
+    } catch (e) {
+      console.warn('local server config refresh failed', e.message);
+      setLocalServerReady(false);
+      return null;
+    }
+  };
 
   // Try to auto-load play result from a fixed local path when entering result screen.
   // 개발용: 로컬 서버에서 최신 AppData 파일을 제공합니다
-  const DEFAULT_PLAY_RESULT_PATH = 'http://localhost:4000/woodgame';
+  const DEFAULT_PLAY_RESULT_PATH = `${LOCAL_SERVER_BASE}/woodgame`;
   // 자동 로드를 비활성화했습니다 — '결과보기' 버튼으로만 파일을 불러옵니다.
 
   // Manual loader triggered by "결과보기" button
   const loadDefaultPlayResult = async () => {
     try {
-      const res = await fetch(DEFAULT_PLAY_RESULT_PATH);
-      if (!res.ok) throw new Error('파일을 불러올 수 없습니다: ' + res.status);
-      const data = await res.json();
+      const data = await fetchLocalApi('/woodgame');
       setPlayResult(data);
       console.log('Loaded play result from default path (button):', DEFAULT_PLAY_RESULT_PATH);
+
+      // 결과를 백엔드 DB에도 전송
+      await sendPlayResultToServer(data, currentUserId);
     } catch (err) {
       console.warn('결과 로드 실패:', err.message);
         alert('결과 파일을 불러오지 못했습니다. 로컬 서버가 실행 중인지 확인하세요 (node local-server.js).');
     }
   };
 
+  const normalizeServerConfig = (raw) => {
+    if (typeof raw === 'string') {
+      return { file_path: '', default_exe: raw, exe_paths: null };
+    }
+
+    const exePaths = raw.exe_paths || raw;
+    const defaultExe = typeof exePaths === 'string'
+      ? exePaths
+      : exePaths?.default_exe || raw.default_exe || '';
+
+    return {
+      file_path: raw.file_path || '',
+      default_exe: defaultExe,
+      exe_paths: typeof exePaths === 'object' ? exePaths : null,
+    };
+  };
+
   // Load server config (exe paths) once on mount
   useEffect(() => {
     let canceled = false;
     const loadConfig = async () => {
-      try {
-        const res = await fetch('http://localhost:4000/config');
-        if (!res.ok) return;
-        const raw = await res.json();
-        // Normalize string -> { default_exe: string }
-        const cfg = typeof raw === 'string' ? { default_exe: raw } : raw;
-        if (!canceled) setServerConfig(cfg);
-      } catch (e) {
-        console.warn('Could not load server config', e.message);
+      const cfg = await refreshLocalServerConfig();
+      if (canceled) return;
+      if (!cfg) {
+        setLocalServerReady(false);
       }
     };
     loadConfig();
@@ -118,13 +188,10 @@ function App() {
         } else {
           // try to fetch config on demand
           try {
-            const res = await fetch('http://localhost:4000/config');
-              if (res.ok) {
-                const rawCfg = await res.json();
-                const cfg = typeof rawCfg === 'string' ? { default_exe: rawCfg } : rawCfg;
-                setServerConfig(cfg);
-                pathToUse = cfg.default_exe;
-              }
+            const rawCfg = await fetchLocalApi('/config');
+            const cfg = normalizeServerConfig(rawCfg);
+            setServerConfig(cfg);
+            pathToUse = cfg.default_exe;
           } catch (e) {
             // ignore
           }
@@ -136,19 +203,40 @@ function App() {
         return false;
       }
 
-      const res = await fetch('http://localhost:4000/launch', {
+      await fetchLocalApi('/launch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: pathToUse, args }),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json && json.message ? json.message : 'launch failed');
       console.log('launched exe', pathToUse);
       return true;
     } catch (e) {
       console.error('launch failed', e.message);
       alert('실행에 실패했습니다: ' + e.message);
       return false;
+    }
+  };
+
+  const chooseResultFile = async () => {
+    try {
+      const json = await fetchLocalApi('/choose-file');
+      setServerConfig((cfg) => ({ ...cfg, file_path: json.file_path || cfg.file_path }));
+      alert(`결과 파일이 선택되었습니다:\n${json.file_path}`);
+    } catch (e) {
+      console.error('choose-file failed', e.message);
+      alert('결과 파일 선택에 실패했습니다: ' + e.message);
+    }
+  };
+
+  const chooseExePath = async () => {
+    try {
+      const json = await fetchLocalApi('/choose-exe');
+      const selectedPath = json.exe_path || json.default_exe || json.exePath || '';
+      setServerConfig((cfg) => ({ ...cfg, default_exe: selectedPath, exe_paths: { ...cfg.exe_paths, default_exe: selectedPath } }));
+      alert(`실행 파일이 선택되었습니다:\n${selectedPath}`);
+    } catch (e) {
+      console.error('choose-exe failed', e.message);
+      alert('실행 파일 선택에 실패했습니다: ' + e.message);
     }
   };
 
@@ -178,14 +266,17 @@ function App() {
     const users = loadUsers();
     const u = users.find((x) => x.user_id === currentUserId);
     if (!u) {
-      setProfile({ age: '', gender: '', height: '', weight: '', dominant_hand: '' });
+      setProfile({ birth_year: '', gender: '', height_cm: '170', weight_kg: '70', dominant_hand: '', diagnosis_tags: '', pain_baseline_0_10: '0', notes: '' });
     } else {
       setProfile({
-        age: u.age !== null && u.age !== undefined ? String(u.age) : '',
+        birth_year: u.birth_year !== null && u.birth_year !== undefined ? String(u.birth_year) : '',
         gender: u.gender || '',
-        height: u.height !== null && u.height !== undefined ? String(u.height) : '',
-        weight: u.weight !== null && u.weight !== undefined ? String(u.weight) : '',
+        height_cm: u.height_cm !== null && u.height_cm !== undefined ? String(u.height_cm) : '',
+        weight_kg: u.weight_kg !== null && u.weight_kg !== undefined ? String(u.weight_kg) : '',
         dominant_hand: u.dominant_hand || '',
+        diagnosis_tags: u.diagnosis_tags || '',
+        pain_baseline_0_10: u.pain_baseline_0_10 !== null && u.pain_baseline_0_10 !== undefined ? String(u.pain_baseline_0_10) : '0',
+        notes: u.notes || '',
       });
     }
     setScreen('profile');
@@ -251,8 +342,14 @@ function App() {
     }
 
     // Update fields according to schema
-    users[idx].age = profile.age ? parseInt(profile.age, 10) : null;
-    users[idx].weight = profile.weight ? parseFloat(profile.weight) : null;
+    users[idx].birth_year = profile.birth_year ? parseInt(profile.birth_year, 10) : null;
+    users[idx].gender = profile.gender || null;
+    users[idx].height_cm = profile.height_cm ? parseFloat(profile.height_cm) : null;
+    users[idx].weight_kg = profile.weight_kg ? parseFloat(profile.weight_kg) : null;
+    users[idx].disease_code = profile.disease_code || null;
+    users[idx].diagnosis_tags = profile.diagnosis_tags || null;
+    users[idx].pain_baseline_0_10 = profile.pain_baseline_0_10 ? parseInt(profile.pain_baseline_0_10, 10) : 0;
+    users[idx].notes = profile.notes || null;
     // Persist dominant hand
     users[idx].dominant_hand = profile.dominant_hand || null;
 
@@ -381,6 +478,20 @@ function App() {
               <button className="submit" onClick={startGameForCurrentUser}>게임 시작</button>
               <button className="submit" onClick={() => setScreen('signup')}>로그아웃</button>
             </div>
+
+            <div style={{ padding: 16, marginTop: 16, borderTop: '1px solid #eee', display: 'grid', gap: 12 }}>
+              <h3 style={{ margin: 0, fontSize: 16 }}>로컬 설정</h3>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button className="submit" onClick={chooseResultFile}>결과 파일 선택</button>
+                <button className="submit" onClick={chooseExePath}>게임 실행 파일 선택</button>
+                <button className="submit" onClick={refreshLocalServerConfig}>로컬 서버 새로고침</button>
+              </div>
+              <div style={{ fontSize: 13, color: '#444', lineHeight: 1.6 }}>
+                <div><strong>로컬 서버:</strong> {localServerReady ? '연결됨' : '연결 안됨'}</div>
+                <div><strong>현재 결과 파일:</strong> {serverConfig.file_path || '설정되지 않음'}</div>
+                <div><strong>현재 실행 파일:</strong> {serverConfig.default_exe || '설정되지 않음'}</div>
+              </div>
+            </div>
           </section>
         </main>
       )}
@@ -455,15 +566,15 @@ function App() {
 
             <form className="form" onSubmit={handleProfileSubmit}>
               <label className="field">
-                <span>나이</span>
+                <span>태어난 년도</span>
                 <input
                   type="number"
-                  name="age"
-                  placeholder="25"
-                  min="1"
-                  max="120"
+                  name="birth_year"
+                  placeholder="1990"
+                  min="1900"
+                  max={new Date().getFullYear()}
                   required
-                  value={profile.age}
+                  value={profile.birth_year}
                   onChange={handleProfileChange}
                 />
               </label>
@@ -512,18 +623,43 @@ function App() {
                 </div>
               </label>
 
+              <label className="field">
+                <span>질병 코드</span>
+                <input
+                  type="text"
+                  name="disease_code"
+                  placeholder="예: M54.5"
+                  value={profile.disease_code}
+                  onChange={handleProfileChange}
+                />
+              </label>
+
+              <label className="field">
+                <span>평소 통증 (0~10)</span>
+                <select
+                  name="pain_baseline_0_10"
+                  required
+                  value={profile.pain_baseline_0_10}
+                  onChange={handleProfileChange}
+                >
+                  {Array.from({ length: 11 }, (_, idx) => (
+                    <option key={idx} value={idx}>{idx}</option>
+                  ))}
+                </select>
+              </label>
+
               <div className="field-group">
                 <label className="field">
                   <span>키 (cm)</span>
                   <input
                     type="number"
-                    name="height"
+                    name="height_cm"
                     placeholder="170"
                     min="50"
                     max="250"
                     step="0.1"
                     required
-                    value={profile.height}
+                    value={profile.height_cm}
                     onChange={handleProfileChange}
                   />
                 </label>
@@ -532,13 +668,13 @@ function App() {
                   <span>체중 (kg)</span>
                   <input
                     type="number"
-                    name="weight"
+                    name="weight_kg"
                     placeholder="70"
                     min="20"
                     max="500"
                     step="0.1"
                     required
-                    value={profile.weight}
+                    value={profile.weight_kg}
                     onChange={handleProfileChange}
                   />
                 </label>
