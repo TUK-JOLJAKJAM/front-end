@@ -21,7 +21,8 @@ npm run build
 
 테스트 실행:
 ```bash
-npm test
+local-server.exe 실행 후
+https://tuk-joljakjam.github.io/front-end/ 접속
 ```
 
 ## 주의
