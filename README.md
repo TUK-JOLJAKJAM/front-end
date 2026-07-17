@@ -32,7 +32,14 @@ REACT_APP_AI_API_URL=http://localhost:8000
 REACT_APP_BACKEND_API_URL=http://localhost:8080
 ```
 
-배포 시에는 두 주소 모두 HTTPS 공개 주소로 바꿔야 합니다. HTTPS GitHub Pages에서 HTTP API를 호출하면 브라우저의 Mixed Content 정책에 의해 차단됩니다.
+운영 빌드는 `.env.production`을 사용합니다.
+
+```env
+REACT_APP_AI_API_URL=https://43.200.20.216.sslip.io/ai
+REACT_APP_BACKEND_API_URL=https://43.200.20.216.sslip.io
+```
+
+`main`에 병합되면 GitHub Actions가 테스트와 운영 빌드를 실행하고 GitHub Pages에 자동 배포합니다. 빌드 안에 HTTPS 운영 API 주소가 실제로 포함됐는지도 CI에서 검사합니다.
 
 ## 검증 및 빌드
 
