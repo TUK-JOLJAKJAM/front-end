@@ -106,6 +106,168 @@ function MetricBar({ label, value }) {
 }
 
 
+function authErrorMessage(error) {
+  if (error?.message === 'INVALID_CREDENTIALS') return '이메일 또는 비밀번호가 일치하지 않습니다.';
+  if (error?.message === 'EMAIL_ALREADY_EXISTS') return '이미 가입된 이메일입니다. 로그인 화면을 이용해 주세요.';
+  return error?.message || '요청을 처리하지 못했습니다.';
+}
+
+
+function AuthLanding({
+  mode,
+  setMode,
+  credentials,
+  setCredentials,
+  signup,
+  setSignup,
+  onLogin,
+  onSignup,
+  loading,
+  error,
+}) {
+  return (
+    <div className="auth-shell">
+      {IS_HTTP_DEMO && (
+        <div className="demo-warning" role="status">
+          HTTP 데모 모드입니다. 실제 환자정보와 실사용 비밀번호 대신 테스트 계정과 비식별 데이터만 사용하세요.
+        </div>
+      )}
+      <main className="auth-page">
+        <section className="auth-hero">
+          <p className="auth-eyebrow">치료와 게임의 만남</p>
+          <h1>환영합니다!</h1>
+          <p>
+            재미있는 게임 속에서 맞춤형 재활 운동을 진행하고,
+            로그인 후 저장된 게임 기록과 분석 결과를 확인하세요.
+          </p>
+          <ul>
+            <li>게임 수행 기록 자동 저장</li>
+            <li>회복 지표와 안전 신호 분석</li>
+            <li>개인별 다음 난이도 추천</li>
+          </ul>
+        </section>
+
+        <section className="auth-card" aria-label={mode === 'login' ? '로그인' : '회원가입'}>
+          <div className="auth-tabs" role="tablist" aria-label="계정 메뉴">
+            <button type="button" className={mode === 'login' ? 'active' : ''} onClick={() => setMode('login')}>로그인</button>
+            <button type="button" className={mode === 'signup' ? 'active' : ''} onClick={() => setMode('signup')}>회원가입</button>
+          </div>
+
+          <div className="auth-card-header">
+            <span className="auth-badge">ReFit</span>
+            <h2>{mode === 'login' ? '다시 오신 것을 환영합니다' : '새 계정 만들기'}</h2>
+            <p>{mode === 'login' ? '로그인하면 분석 대시보드로 이동합니다.' : '가입 후 신체 정보 설정을 진행합니다.'}</p>
+          </div>
+
+          {error && <div className="auth-error" role="alert">{error}</div>}
+
+          {mode === 'login' ? (
+            <form className="auth-form" onSubmit={onLogin}>
+              <label>
+                <span>이메일</span>
+                <input
+                  type="email"
+                  autoComplete="username"
+                  required
+                  value={credentials.email}
+                  onChange={(event) => setCredentials({ ...credentials, email: event.target.value })}
+                  placeholder="refit-test@example.com"
+                />
+              </label>
+              <label>
+                <span>비밀번호</span>
+                <input
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                  value={credentials.password}
+                  onChange={(event) => setCredentials({ ...credentials, password: event.target.value })}
+                  placeholder="8자 이상"
+                />
+              </label>
+              <button className="auth-submit" disabled={loading}>{loading ? '로그인 중...' : '로그인하고 분석 보기'}</button>
+              <p className="auth-footnote">계정이 없나요? <button type="button" onClick={() => setMode('signup')}>회원가입</button></p>
+            </form>
+          ) : (
+            <form className="auth-form" onSubmit={onSignup}>
+              <label>
+                <span>이름</span>
+                <input required maxLength="50" value={signup.name} onChange={(event) => setSignup({ ...signup, name: event.target.value })} placeholder="테스트 사용자" />
+              </label>
+              <label>
+                <span>이메일</span>
+                <input type="email" autoComplete="username" required value={signup.email} onChange={(event) => setSignup({ ...signup, email: event.target.value })} placeholder="test@example.com" />
+              </label>
+              <div className="auth-field-row">
+                <label>
+                  <span>비밀번호</span>
+                  <input type="password" autoComplete="new-password" minLength="8" required value={signup.password} onChange={(event) => setSignup({ ...signup, password: event.target.value })} placeholder="8자 이상" />
+                </label>
+                <label>
+                  <span>비밀번호 확인</span>
+                  <input type="password" autoComplete="new-password" minLength="8" required value={signup.confirm} onChange={(event) => setSignup({ ...signup, confirm: event.target.value })} placeholder="다시 입력" />
+                </label>
+              </div>
+              <label className="auth-checkbox">
+                <input type="checkbox" required checked={signup.terms} onChange={(event) => setSignup({ ...signup, terms: event.target.checked })} />
+                <span>HTTP 데모에는 테스트 정보만 입력하는 것에 동의합니다.</span>
+              </label>
+              <button className="auth-submit" disabled={loading}>{loading ? '가입 중...' : '가입하고 시작하기'}</button>
+              <p className="auth-footnote">이미 계정이 있나요? <button type="button" onClick={() => setMode('login')}>로그인</button></p>
+            </form>
+          )}
+        </section>
+      </main>
+    </div>
+  );
+}
+
+
+function ProfileSetup({ profile, setProfile, onSave, onSkip, loading, error }) {
+  return (
+    <div className="auth-shell">
+      {IS_HTTP_DEMO && (
+        <div className="demo-warning" role="status">
+          HTTP 데모에서는 실제 신체정보 대신 가짜 테스트 값을 입력하거나 이 단계를 건너뛰세요.
+        </div>
+      )}
+      <main className="auth-page">
+        <section className="auth-hero">
+          <p className="auth-eyebrow">개인화 설정</p>
+          <h1>분석 준비를 마무리합니다</h1>
+          <p>테스트용 신체 정보를 입력하면 게임 기록과 함께 분석에 활용할 수 있습니다.</p>
+          <ul>
+            <li>개인별 가동범위 분석 기반 마련</li>
+            <li>운동 전 기준 통증과 세션 비교</li>
+            <li>언제든지 대시보드에서 기록 확인</li>
+          </ul>
+        </section>
+        <section className="auth-card" aria-label="프로필 설정">
+          <div className="auth-card-header">
+            <span className="auth-badge">Step 2</span>
+            <h2>테스트 프로필 설정</h2>
+            <p>실제 개인정보를 입력하지 마세요. 지금은 건너뛰어도 됩니다.</p>
+          </div>
+          {error && <div className="auth-error" role="alert">{error}</div>}
+          <form className="auth-form" onSubmit={onSave}>
+            <div className="auth-field-row">
+              <label><span>키 (cm)</span><input type="number" min="50" max="250" step="0.1" required value={profile.heightCm} onChange={(event) => setProfile({ ...profile, heightCm: event.target.value })} /></label>
+              <label><span>몸무게 (kg)</span><input type="number" min="20" max="300" step="0.1" required value={profile.weightKg} onChange={(event) => setProfile({ ...profile, weightKg: event.target.value })} /></label>
+            </div>
+            <div className="auth-field-row">
+              <label><span>주 사용 손</span><select value={profile.dominantHand} onChange={(event) => setProfile({ ...profile, dominantHand: event.target.value })}><option value="R">오른손</option><option value="L">왼손</option></select></label>
+              <label><span>기준 통증 (0~10)</span><input type="number" min="0" max="10" required value={profile.painBaseline0to10} onChange={(event) => setProfile({ ...profile, painBaseline0to10: event.target.value })} /></label>
+            </div>
+            <button className="auth-submit" disabled={loading}>{loading ? '저장 중...' : '저장하고 분석 대시보드 열기'}</button>
+            <button className="auth-skip" type="button" onClick={onSkip} disabled={loading}>지금은 건너뛰기</button>
+          </form>
+        </section>
+      </main>
+    </div>
+  );
+}
+
+
 function AnalysisDashboard({ analysis }) {
   const distributionMax = Math.max(1, ...Object.values(analysis.distribution_data || {}));
   return (
@@ -253,21 +415,139 @@ function AnalysisDashboard({ analysis }) {
 
 
 function App() {
-  const [aiUrl, setAiUrl] = useState(DEFAULT_AI_URL);
-  const [backendUrl, setBackendUrl] = useState(DEFAULT_BACKEND_URL);
+  const aiUrl = DEFAULT_AI_URL;
+  const backendUrl = DEFAULT_BACKEND_URL;
   const [rawJson, setRawJson] = useState(JSON.stringify(DEMO_SESSION, null, 2));
   const [analysis, setAnalysis] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [showJson, setShowJson] = useState(false);
+  const [showJson, setShowJson] = useState(() => Boolean(sessionStorage.getItem('refitAccessToken')));
 
+  const [authMode, setAuthMode] = useState('login');
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState('');
   const [credentials, setCredentials] = useState({ email: '', password: '' });
+  const [signup, setSignup] = useState({ name: '', email: '', password: '', confirm: '', terms: false });
+  const [profile, setProfile] = useState({ heightCm: '170', weightKg: '65', dominantHand: 'R', painBaseline0to10: '1' });
+  const [needsProfileSetup, setNeedsProfileSetup] = useState(false);
   const [accessToken, setAccessToken] = useState(() => sessionStorage.getItem('refitAccessToken') || '');
+  const [accountEmail, setAccountEmail] = useState(() => sessionStorage.getItem('refitAccountEmail') || '');
   const [histories, setHistories] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
   const normalizedAiUrl = useMemo(() => aiUrl.replace(/\/$/, ''), [aiUrl]);
   const normalizedBackendUrl = useMemo(() => backendUrl.replace(/\/$/, ''), [backendUrl]);
+
+  const loadHistories = async (token = accessToken) => {
+    if (!token) return;
+    setHistoryLoading(true);
+    setError('');
+    try {
+      const response = await requestJson(`${normalizedBackendUrl}/api/v1/game-histories?size=50`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setHistories(response.items || []);
+    } catch (requestError) {
+      setError(`게임 기록 조회 실패: ${requestError.message}`);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const establishSession = async (email, password) => {
+    const normalizedEmail = email.trim();
+    const response = await requestJson(`${normalizedBackendUrl}/api/v1/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: normalizedEmail,
+        password,
+        clientType: 'WEB',
+        deviceId: 'react-analysis-dashboard',
+      }),
+    });
+    setAccessToken(response.accessToken);
+    setAccountEmail(normalizedEmail);
+    sessionStorage.setItem('refitAccessToken', response.accessToken);
+    sessionStorage.setItem('refitAccountEmail', normalizedEmail);
+    return response;
+  };
+
+  const loginBackend = async (event) => {
+    event.preventDefault();
+    setAuthLoading(true);
+    setAuthError('');
+    try {
+      const response = await establishSession(credentials.email, credentials.password);
+      setShowJson(true);
+      await loadHistories(response.accessToken);
+    } catch (requestError) {
+      setAuthError(authErrorMessage(requestError));
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const signupBackend = async (event) => {
+    event.preventDefault();
+    setAuthError('');
+    if (signup.password !== signup.confirm) {
+      setAuthError('비밀번호와 비밀번호 확인이 일치하지 않습니다.');
+      return;
+    }
+    setAuthLoading(true);
+    try {
+      await requestJson(`${normalizedBackendUrl}/api/v1/auth/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: signup.email.trim(),
+          password: signup.password,
+          name: signup.name.trim(),
+          role: 'PATIENT',
+        }),
+      });
+      await establishSession(signup.email, signup.password);
+      setNeedsProfileSetup(true);
+    } catch (requestError) {
+      setAuthError(authErrorMessage(requestError));
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const saveProfile = async (event) => {
+    event.preventDefault();
+    setAuthLoading(true);
+    setAuthError('');
+    try {
+      await requestJson(`${normalizedBackendUrl}/api/v1/users/me/profile`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          heightCm: Number(profile.heightCm),
+          weightKg: Number(profile.weightKg),
+          dominantHand: profile.dominantHand,
+          diagnosisTags: [],
+          painBaseline0to10: Number(profile.painBaseline0to10),
+          notes: '',
+        }),
+      });
+      setNeedsProfileSetup(false);
+      setShowJson(true);
+      await loadHistories(accessToken);
+    } catch (requestError) {
+      setAuthError(`프로필 저장 실패: ${requestError.message}`);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const skipProfile = async () => {
+    setNeedsProfileSetup(false);
+    setShowJson(true);
+    await loadHistories(accessToken);
+  };
 
   const analyzePayload = async (payload) => {
     setLoading(true);
@@ -301,57 +581,16 @@ function App() {
     analyzePayload(payload);
   };
 
-  const loginBackend = async (event) => {
-    event.preventDefault();
-    setHistoryLoading(true);
-    setError('');
-    try {
-      const response = await requestJson(`${normalizedBackendUrl}/api/v1/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: credentials.email,
-          password: credentials.password,
-          clientType: 'WEB',
-          deviceId: 'react-analysis-dashboard',
-        }),
-      });
-      setAccessToken(response.accessToken);
-      sessionStorage.setItem('refitAccessToken', response.accessToken);
-      await loadHistories(response.accessToken);
-    } catch (requestError) {
-      setError(`백엔드 로그인 실패: ${requestError.message}`);
-    } finally {
-      setHistoryLoading(false);
-    }
-  };
-
-  const loadHistories = async (token = accessToken) => {
-    if (!token) return;
-    setHistoryLoading(true);
-    setError('');
-    try {
-      const response = await requestJson(`${normalizedBackendUrl}/api/v1/game-histories?size=50`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setHistories(response.items || []);
-    } catch (requestError) {
-      setError(`게임 기록 조회 실패: ${requestError.message}`);
-    } finally {
-      setHistoryLoading(false);
-    }
-  };
-
   const analyzeHistory = async (historyId) => {
     setHistoryLoading(true);
     setError('');
     try {
       const headers = { Authorization: `Bearer ${accessToken}` };
-      const [history, profile] = await Promise.all([
+      const [history, savedProfile] = await Promise.all([
         requestJson(`${normalizedBackendUrl}/api/v1/game-histories/${historyId}`, { headers }),
         requestJson(`${normalizedBackendUrl}/api/v1/users/me/profile`, { headers }).catch(() => null),
       ]);
-      const payload = profile ? { ...history, profile } : history;
+      const payload = savedProfile ? { ...history, profile: savedProfile } : history;
       setRawJson(JSON.stringify(payload, null, 2));
       await analyzePayload(payload);
     } catch (requestError) {
@@ -361,11 +600,59 @@ function App() {
     }
   };
 
-  const logoutLocal = () => {
-    sessionStorage.removeItem('refitAccessToken');
-    setAccessToken('');
-    setHistories([]);
+  const logoutBackend = async () => {
+    try {
+      if (accessToken) {
+        await requestJson(`${normalizedBackendUrl}/api/v1/auth/logout`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+      }
+    } catch {
+      // 로컬 세션은 서버 응답과 관계없이 반드시 정리한다.
+    } finally {
+      sessionStorage.removeItem('refitAccessToken');
+      sessionStorage.removeItem('refitAccountEmail');
+      setAccessToken('');
+      setAccountEmail('');
+      setCredentials({ email: '', password: '' });
+      setHistories([]);
+      setAnalysis(null);
+      setShowJson(false);
+      setAuthMode('login');
+      setAuthError('');
+    }
   };
+
+  if (!accessToken) {
+    return (
+      <AuthLanding
+        mode={authMode}
+        setMode={setAuthMode}
+        credentials={credentials}
+        setCredentials={setCredentials}
+        signup={signup}
+        setSignup={setSignup}
+        onLogin={loginBackend}
+        onSignup={signupBackend}
+        loading={authLoading}
+        error={authError}
+      />
+    );
+  }
+
+  if (needsProfileSetup) {
+    return (
+      <ProfileSetup
+        profile={profile}
+        setProfile={setProfile}
+        onSave={saveProfile}
+        onSkip={skipProfile}
+        loading={authLoading}
+        error={authError}
+      />
+    );
+  }
 
   return (
     <div className="app-shell">
@@ -376,12 +663,14 @@ function App() {
           <span>게임형 재활 세션 리포트</span>
         </div>
         <div className="topbar-actions">
+          <span className="account-chip">{accountEmail || '로그인됨'}</span>
           <button className="button secondary" onClick={() => setShowJson((value) => !value)}>
-            {showJson ? '입력창 닫기' : '데이터 입력'}
+            {showJson ? '기록 닫기' : '게임 기록'}
           </button>
           <button className="button primary" onClick={runDemo} disabled={loading}>
-            {loading ? '분석 중...' : '샘플 분석 실행'}
+            {loading ? '분석 중...' : '샘플 분석'}
           </button>
+          <button className="text-button logout-button" onClick={logoutBackend}>로그아웃</button>
         </div>
       </header>
 
@@ -396,7 +685,7 @@ function App() {
           <div>
             <p className="section-kicker">Rehabilitation intelligence</p>
             <h1>재활 게임 데이터 분석</h1>
-            <p>게임 수행 데이터를 분석해 회복 지표, 위험 신호와 다음 난이도를 한 화면에 보여줍니다.</p>
+            <p>로그인한 사용자의 게임 기록을 분석해 회복 지표, 위험 신호와 다음 난이도를 보여줍니다.</p>
           </div>
           {analysis && (
             <div className="analysis-time">
@@ -412,23 +701,14 @@ function App() {
           <section className="input-workspace">
             <article className="panel connection-panel">
               <div className="panel-heading">
-                <div><p className="section-kicker">Connection</p><h3>서버 연결</h3></div>
+                <div><p className="section-kicker">Account</p><h3>로그인된 계정</h3></div>
               </div>
-              <label>AI 서버 주소<input value={aiUrl} onChange={(event) => setAiUrl(event.target.value)} /></label>
-              <label>Spring 백엔드 주소<input value={backendUrl} onChange={(event) => setBackendUrl(event.target.value)} /></label>
-              {!accessToken ? (
-                <form onSubmit={loginBackend} className="login-form">
-                  <label>이메일<input type="email" required value={credentials.email} onChange={(event) => setCredentials({ ...credentials, email: event.target.value })} /></label>
-                  <label>비밀번호<input type="password" required value={credentials.password} onChange={(event) => setCredentials({ ...credentials, password: event.target.value })} /></label>
-                  <button className="button primary" disabled={historyLoading}>{historyLoading ? '연결 중...' : '로그인 후 기록 불러오기'}</button>
-                </form>
-              ) : (
-                <div className="connected-actions">
-                  <StatusBadge value="CONNECTED" />
-                  <button className="button secondary" onClick={() => loadHistories()}>기록 새로고침</button>
-                  <button className="text-button" onClick={logoutLocal}>연결 해제</button>
-                </div>
-              )}
+              <StatusBadge value="CONNECTED" />
+              <p className="account-email">{accountEmail}</p>
+              <p className="server-summary">게임 기록은 Spring에서 조회하고 선택한 기록만 AI 서버로 분석합니다.</p>
+              <button className="button secondary refresh-button" onClick={() => loadHistories()} disabled={historyLoading}>
+                {historyLoading ? '불러오는 중...' : '기록 새로고침'}
+              </button>
             </article>
 
             <article className="panel json-panel">
@@ -439,21 +719,19 @@ function App() {
               <textarea value={rawJson} onChange={(event) => setRawJson(event.target.value)} spellCheck="false" />
             </article>
 
-            {accessToken && (
-              <article className="panel history-panel">
-                <div className="panel-heading"><div><p className="section-kicker">Backend history</p><h3>저장된 게임 기록</h3></div></div>
-                {histories.length === 0 ? <p className="empty-text">저장된 기록이 없거나 아직 불러오지 않았습니다.</p> : (
-                  <div className="history-list">
-                    {histories.map((history) => (
-                      <button key={history.historyId} onClick={() => analyzeHistory(history.historyId)}>
-                        <span><strong>{history.gameName || history.gameId}</strong><small>{history.primaryPart} · {history.actionCount ?? 0}회</small></span>
-                        <span><strong>{history.score ?? '-'}</strong><small>{history.endedAtMs ? new Date(history.endedAtMs).toLocaleDateString('ko-KR') : ''}</small></span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </article>
-            )}
+            <article className="panel history-panel">
+              <div className="panel-heading"><div><p className="section-kicker">Backend history</p><h3>저장된 게임 기록</h3></div></div>
+              {histories.length === 0 ? <p className="empty-text">저장된 기록이 없습니다. Unity 플레이 후 새로고침하거나 샘플 분석을 실행하세요.</p> : (
+                <div className="history-list">
+                  {histories.map((history) => (
+                    <button key={history.historyId} onClick={() => analyzeHistory(history.historyId)}>
+                      <span><strong>{history.gameName || history.gameId}</strong><small>{history.primaryPart} · {history.actionCount ?? 0}회</small></span>
+                      <span><strong>{history.score ?? '-'}</strong><small>{history.endedAtMs ? new Date(history.endedAtMs).toLocaleDateString('ko-KR') : ''}</small></span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </article>
           </section>
         )}
 
@@ -463,8 +741,10 @@ function App() {
           <section className="empty-state">
             <div className="empty-icon">↗</div>
             <h2>분석 결과가 아직 없습니다</h2>
-            <p>상단의 ‘샘플 분석 실행’을 누르면 전체 대시보드를 즉시 확인할 수 있습니다.</p>
-            <button className="button primary" onClick={runDemo} disabled={loading}>{loading ? '분석 중...' : '샘플 데이터 분석하기'}</button>
+            <p>‘게임 기록’을 열어 저장된 기록을 선택하거나 샘플 분석을 실행하세요.</p>
+            <button className="button primary" onClick={() => { setShowJson(true); loadHistories(); }} disabled={historyLoading}>
+              {historyLoading ? '기록 불러오는 중...' : '내 게임 기록 보기'}
+            </button>
           </section>
         )}
       </main>
