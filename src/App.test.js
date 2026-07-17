@@ -55,7 +55,7 @@ test('logs in, loads histories, and only then opens the analysis dashboard', asy
   global.fetch = jest.fn()
     .mockImplementationOnce(() => jsonResponse({ accessToken: 'access-test', userId: 'user-test' }))
     .mockImplementationOnce(() => jsonResponse({
-      items: [{ historyId: 'history-1', gameName: '수동 연동 테스트', primaryPart: 'SHOULDER', actionCount: 6, score: 84 }],
+      items: [{ historyId: 'history-1', gameName: '수동 연동 테스트', primaryPart: 'SHOULDER', actionCount: 6, score: 84, endedAtMs: 1700000000000 }],
     }));
 
   render(<App />);
@@ -65,6 +65,7 @@ test('logs in, loads histories, and only then opens the analysis dashboard', asy
 
   expect(await screen.findByRole('heading', { name: '재활 게임 데이터 분석' })).toBeInTheDocument();
   expect(await screen.findByText('수동 연동 테스트')).toBeInTheDocument();
+  expect(screen.getByText(/2023.*11.*15.*오전.*7:13/)).toBeInTheDocument();
   expect(global.fetch).toHaveBeenNthCalledWith(
     1,
     `${CONFIGURED_BACKEND_URL}/api/v1/auth/login`,
@@ -78,6 +79,30 @@ test('logs in, loads histories, and only then opens the analysis dashboard', asy
     `${CONFIGURED_BACKEND_URL}/api/v1/game-histories?size=50`,
     expect.objectContaining({ headers: { Authorization: 'Bearer access-test' } }),
   );
+});
+
+test('does not render malformed legacy timestamps as invalid or unrealistic dates', async () => {
+  sessionStorage.setItem('refitAccessToken', 'existing-access');
+  sessionStorage.setItem('refitAccountEmail', 'test@example.com');
+  global.fetch = jest.fn()
+    .mockImplementationOnce(() => jsonResponse({
+      items: [{
+        historyId: 'legacy-history',
+        gameName: '레거시 기록',
+        primaryPart: 'SHOULDER',
+        actionCount: 5,
+        score: 17,
+        endedAtMs: 20260717205745,
+      }],
+    }))
+    .mockImplementationOnce(() => jsonResponse({ items: [] }));
+
+  render(<App />);
+  fireEvent.click(screen.getByRole('button', { name: '기록 새로고침' }));
+
+  expect(await screen.findByText('레거시 기록')).toBeInTheDocument();
+  expect(screen.getByText('시간 정보 없음')).toBeInTheDocument();
+  expect(screen.queryByText(/Invalid Date|66173/)).not.toBeInTheDocument();
 });
 
 test('signs up through Spring and shows profile setup before the dashboard', async () => {

@@ -5,6 +5,49 @@ import './App.css';
 const DEFAULT_AI_URL = process.env.REACT_APP_AI_API_URL || 'http://localhost:8000';
 const DEFAULT_BACKEND_URL = process.env.REACT_APP_BACKEND_API_URL || 'http://localhost:8080';
 const IS_HTTP_DEMO = typeof window !== 'undefined' && window.location.protocol === 'http:';
+const MIN_SESSION_TIME_MS = Date.UTC(2000, 0, 1);
+const MAX_SESSION_TIME_MS = Date.UTC(2100, 0, 1);
+
+const SESSION_DATE_TIME_PARTS_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Asia/Seoul',
+  year: 'numeric',
+  month: 'numeric',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+
+function formatSessionDateTime(timestampMs) {
+  if (timestampMs === null || timestampMs === undefined || timestampMs === '') {
+    return '시간 정보 없음';
+  }
+
+  let normalizedTimestamp = Number(timestampMs);
+  if (!Number.isFinite(normalizedTimestamp)) return '시간 정보 없음';
+
+  // 일부 레거시 클라이언트가 epoch seconds를 전송한 경우에만 안전하게 보정한다.
+  if (normalizedTimestamp >= 1_000_000_000 && normalizedTimestamp < 10_000_000_000) {
+    normalizedTimestamp *= 1000;
+  }
+
+  if (normalizedTimestamp < MIN_SESSION_TIME_MS || normalizedTimestamp >= MAX_SESSION_TIME_MS) {
+    return '시간 정보 없음';
+  }
+
+  const date = new Date(normalizedTimestamp);
+  if (Number.isNaN(date.getTime())) return '시간 정보 없음';
+  const parts = Object.fromEntries(
+    SESSION_DATE_TIME_PARTS_FORMATTER
+      .formatToParts(date)
+      .filter(({ type }) => type !== 'literal')
+      .map(({ type, value }) => [type, value]),
+  );
+  const hour = Number(parts.hour);
+  const period = hour < 12 ? '오전' : '오후';
+  const displayHour = hour % 12 || 12;
+  return `${parts.year}. ${Number(parts.month)}. ${Number(parts.day)}. ${period} ${displayHour}:${parts.minute}`;
+}
 
 function quaternionSample(timestampMs, angleDeg) {
   const halfRadians = (angleDeg * Math.PI) / 360;
@@ -871,7 +914,7 @@ function App() {
                   {histories.map((history) => (
                     <button key={history.historyId} onClick={() => analyzeHistory(history.historyId)}>
                       <span><strong>{history.gameName || history.gameId}</strong><small>{history.primaryPart} · {history.actionCount ?? 0}회 · 계약 {history.schemaVersion || 'legacy'}</small></span>
-                      <span><strong>{history.score ?? '-'}</strong><small>{history.endedAtMs ? new Date(history.endedAtMs).toLocaleDateString('ko-KR') : ''}</small></span>
+                      <span><strong>{history.score ?? '-'}</strong><small>{formatSessionDateTime(history.endedAtMs)}</small></span>
                     </button>
                   ))}
                 </div>
