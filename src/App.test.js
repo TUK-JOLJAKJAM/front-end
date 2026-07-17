@@ -16,7 +16,7 @@ const ANALYSIS_RESPONSE = {
   distribution_data: {},
   metrics: {},
   difficulty: {},
-  data_quality: { completeness: 1, status: 'GOOD', flags: [] },
+  data_quality: { completeness: 1, confidence: 1, status: 'GOOD', assessable: true, sensor_sample_count: 30, flags: [] },
   coaching_messages: [],
   reason_codes: [],
   risk_flags: [],
@@ -121,4 +121,59 @@ test('runs AI analysis only after an authenticated session exists', async () => 
   );
   expect(await screen.findByText('안정적으로 수행했습니다.')).toBeInTheDocument();
   expect(screen.getByText('88')).toBeInTheDocument();
+  expect(screen.getByText('샘플 미리보기 결과입니다')).toBeInTheDocument();
+});
+
+test('routes a saved game history through Spring and reports DB persistence', async () => {
+  sessionStorage.setItem('refitAccessToken', 'existing-access');
+  sessionStorage.setItem('refitAccountEmail', 'test@example.com');
+  global.fetch = jest.fn()
+    .mockImplementationOnce(() => jsonResponse({
+      items: [{ historyId: 'history-1', gameName: 'Unity 어깨 게임', primaryPart: 'SHOULDER', actionCount: 6, score: 84, schemaVersion: '2.0' }],
+    }))
+    .mockImplementationOnce(() => jsonResponse({ items: [] }))
+    .mockImplementationOnce(() => jsonResponse({ ...ANALYSIS_RESPONSE, analysis_id: 'analysis-1' }))
+    .mockImplementationOnce(() => jsonResponse({ historyId: 'history-1', gameId: 'UNITY_GAME', gameData: [] }))
+    .mockImplementationOnce(() => jsonResponse({ items: [{ analysisId: 'analysis-1' }] }))
+    .mockImplementationOnce(() => jsonResponse({ items: [{ analysisId: 'analysis-1', historyId: 'history-1', score: 88, safetyStatus: 'SAFE', analyzedAtMs: 1700000000000 }] }));
+
+  render(<App />);
+  fireEvent.click(screen.getByRole('button', { name: '기록 새로고침' }));
+  fireEvent.click(await screen.findByRole('button', { name: /Unity 어깨 게임/ }));
+
+  expect(await screen.findByText('Spring DB에 분석 결과가 저장되었습니다')).toBeInTheDocument();
+  expect(global.fetch).toHaveBeenNthCalledWith(
+    3,
+    `${CONFIGURED_BACKEND_URL}/api/v1/game-histories/history-1/analyses`,
+    expect.objectContaining({
+      method: 'POST',
+      headers: { Authorization: 'Bearer existing-access' },
+    }),
+  );
+});
+
+test('falls back to the latest persisted result when a new analysis is unavailable', async () => {
+  sessionStorage.setItem('refitAccessToken', 'existing-access');
+  sessionStorage.setItem('refitAccountEmail', 'test@example.com');
+  global.fetch = jest.fn()
+    .mockImplementationOnce(() => jsonResponse({
+      items: [{ historyId: 'history-1', gameName: 'Unity 허리 게임', primaryPart: 'WAIST', actionCount: 5 }],
+    }))
+    .mockImplementationOnce(() => jsonResponse({ items: [] }))
+    .mockImplementationOnce(() => jsonResponse({ error: 'AI_ANALYSIS_UNAVAILABLE' }, false))
+    .mockImplementationOnce(() => jsonResponse({ ...ANALYSIS_RESPONSE, analysis_id: 'cached-analysis' }))
+    .mockImplementationOnce(() => jsonResponse({ historyId: 'history-1', gameId: 'UNITY_GAME' }))
+    .mockImplementationOnce(() => jsonResponse({ items: [{ analysisId: 'cached-analysis' }] }))
+    .mockImplementationOnce(() => jsonResponse({ items: [{ analysisId: 'cached-analysis', historyId: 'history-1', score: 88, safetyStatus: 'SAFE', analyzedAtMs: 1700000000000 }] }));
+
+  render(<App />);
+  fireEvent.click(screen.getByRole('button', { name: '기록 새로고침' }));
+  fireEvent.click(await screen.findByRole('button', { name: /Unity 허리 게임/ }));
+
+  expect(await screen.findByText(/DB에 저장된 최신 분석 결과를 표시합니다/)).toBeInTheDocument();
+  expect(global.fetch).toHaveBeenNthCalledWith(
+    4,
+    `${CONFIGURED_BACKEND_URL}/api/v1/game-histories/history-1/analyses/latest`,
+    expect.objectContaining({ headers: { Authorization: 'Bearer existing-access' } }),
+  );
 });

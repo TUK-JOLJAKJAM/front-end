@@ -6,8 +6,47 @@ const DEFAULT_AI_URL = process.env.REACT_APP_AI_API_URL || 'http://localhost:800
 const DEFAULT_BACKEND_URL = process.env.REACT_APP_BACKEND_API_URL || 'http://localhost:8080';
 const IS_HTTP_DEMO = typeof window !== 'undefined' && window.location.protocol === 'http:';
 
-const DEMO_SESSION = {
-  schema_version: '1.0',
+function quaternionSample(timestampMs, angleDeg) {
+  const halfRadians = (angleDeg * Math.PI) / 360;
+  return {
+    timestamp_ms: Math.round(timestampMs),
+    qx: Math.sin(halfRadians),
+    qy: 0,
+    qz: 0,
+    qw: Math.cos(halfRadians),
+  };
+}
+
+
+function buildDemoSession(baseTime = Date.now()) {
+  const actionSpecs = [
+    ['1', 74, 1120, 'GOOD'],
+    ['2', 80, 1180, 'PERFECT'],
+    ['3', 78, 1210, 'GOOD'],
+    ['4', 72, 1260, 'NORMAL'],
+    ['5', 75, 1290, 'GOOD'],
+    ['6', 73, 1320, 'GOOD'],
+  ];
+  const actions = actionSpecs.map(([id, rom, duration, grade], index) => {
+    const startedAt = baseTime + (index * 2600);
+    const sampleAngles = [0, rom * 0.45, rom, rom * 0.5, 0];
+    return {
+      action_id: id,
+      action_type: 'ATTACK',
+      exercise_code: 'SHOULDER_FLEXION',
+      direction: 'FORWARD',
+      started_at_ms: startedAt,
+      ended_at_ms: startedAt + duration,
+      duration_ms: duration,
+      result: true,
+      grade,
+      samples: sampleAngles.map((angle, sampleIndex) => (
+        quaternionSample(startedAt + ((duration / 4) * sampleIndex), angle)
+      )),
+    };
+  });
+  return {
+  schema_version: '2.0',
   history_id: 'react-demo-session',
   user_id: 'demo-user',
   game_id: 'ADVENTURE_FIGHT',
@@ -16,8 +55,8 @@ const DEMO_SESSION = {
   primary_part: 'SHOULDER',
   side: 'BOTH',
   difficulty: 2,
-  started_at_ms: Date.now(),
-  ended_at_ms: Date.now() + 20000,
+  started_at_ms: baseTime,
+  ended_at_ms: baseTime + 20000,
   action_count: 6,
   success_count: 6,
   fail_count: 0,
@@ -27,15 +66,12 @@ const DEMO_SESSION = {
     fatigue_after_0_10: 4,
     swelling: false,
   },
-  actions: [
-    { action_id: '1', action_type: 'ATTACK', direction: 'FORWARD', duration_ms: 1120, result: true, grade: 'GOOD', rom_deg: 74, peak_angular_velocity_dps: 122 },
-    { action_id: '2', action_type: 'ATTACK', direction: 'FORWARD', duration_ms: 1180, result: true, grade: 'PERFECT', rom_deg: 80, peak_angular_velocity_dps: 126 },
-    { action_id: '3', action_type: 'ATTACK', direction: 'FORWARD', duration_ms: 1210, result: true, grade: 'GOOD', rom_deg: 78, peak_angular_velocity_dps: 130 },
-    { action_id: '4', action_type: 'ATTACK', direction: 'FORWARD', duration_ms: 1260, result: true, grade: 'NORMAL', rom_deg: 72, peak_angular_velocity_dps: 134 },
-    { action_id: '5', action_type: 'ATTACK', direction: 'FORWARD', duration_ms: 1290, result: true, grade: 'GOOD', rom_deg: 75, peak_angular_velocity_dps: 138 },
-    { action_id: '6', action_type: 'ATTACK', direction: 'FORWARD', duration_ms: 1320, result: true, grade: 'GOOD', rom_deg: 73, peak_angular_velocity_dps: 142 },
-  ],
-};
+  actions,
+  };
+}
+
+
+const DEMO_SESSION = buildDemoSession();
 
 const METRIC_LABELS = {
   success_rate: '성공률',
@@ -268,8 +304,13 @@ function ProfileSetup({ profile, setProfile, onSave, onSkip, loading, error }) {
 }
 
 
-function AnalysisDashboard({ analysis }) {
+function AnalysisDashboard({ analysis, persisted, analysisHistory, userAnalyses }) {
   const distributionMax = Math.max(1, ...Object.values(analysis.distribution_data || {}));
+  const latestByHistory = new Map();
+  (userAnalyses || []).forEach((item) => {
+    if (!latestByHistory.has(item.historyId)) latestByHistory.set(item.historyId, item);
+  });
+  const recentSessions = Array.from(latestByHistory.values()).slice(0, 8).reverse();
   return (
     <section className="dashboard" aria-live="polite">
       <div className="summary-grid">
@@ -299,6 +340,18 @@ function AnalysisDashboard({ analysis }) {
         </article>
       </div>
 
+      <div className={`provenance-strip ${persisted ? 'persisted' : 'preview'}`}>
+        <span className="provenance-icon">{persisted ? '✓' : 'i'}</span>
+        <div>
+          <strong>{persisted ? 'Spring DB에 분석 결과가 저장되었습니다' : '샘플 미리보기 결과입니다'}</strong>
+          <small>
+            {persisted
+              ? `분석 ID ${analysis.analysis_id} · 동일 기록 재분석 이력 ${analysisHistory.length || 1}건`
+              : '실제 게임 기록과 연결되지 않으며 DB에는 저장되지 않습니다.'}
+          </small>
+        </div>
+      </div>
+
       <div className="feedback-panel">
         <div>
           <p className="section-kicker">이번 세션 분석</p>
@@ -310,6 +363,28 @@ function AnalysisDashboard({ analysis }) {
           <span>{analysis.analysis_version}</span>
         </div>
       </div>
+
+      {recentSessions.length > 0 && (
+        <article className="panel trend-panel">
+          <div className="panel-heading inline-heading">
+            <div>
+              <p className="section-kicker">Recovery trend</p>
+              <h3>최근 세션 회복 추세</h3>
+            </div>
+            <small>DB에 저장된 기록 기준 · 최근 {recentSessions.length}개 세션</small>
+          </div>
+          <div className="trend-chart" aria-label="최근 분석 점수 추세">
+            {recentSessions.map((item, index) => (
+              <div className="trend-column" key={item.analysisId || `${item.historyId}-${index}`}>
+                <strong>{item.score}</strong>
+                <div className="trend-track"><span style={{ height: `${Math.max(4, Math.min(100, item.score || 0))}%` }} /></div>
+                <small>{new Date(item.analyzedAtMs).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}</small>
+                <StatusBadge value={item.safetyStatus} />
+              </div>
+            ))}
+          </div>
+        </article>
+      )}
 
       <div className="content-grid">
         <article className="panel">
@@ -364,7 +439,18 @@ function AnalysisDashboard({ analysis }) {
           </div>
           <div className="quality-score">
             <strong>{formatPercent(analysis.data_quality?.completeness, true)}</strong>
-            <span>수집 완성도 · 센서 샘플 {analysis.data_quality?.sensor_sample_count || 0}개</span>
+            <span>
+              수집 완성도 · 신뢰도 {formatPercent(analysis.data_quality?.confidence, true)}
+              {' · '}센서 샘플 {analysis.data_quality?.sensor_sample_count || 0}개
+            </span>
+          </div>
+          <div className={`assessability ${analysis.data_quality?.assessable ? 'ready' : 'held'}`}>
+            <strong>{analysis.data_quality?.assessable ? '규칙 판정 가능' : '판정 보류'}</strong>
+            <span>
+              {analysis.data_quality?.assessable
+                ? '필수 동작·시간·ROM·속도·센서 조건을 충족했습니다.'
+                : '누락 데이터를 보완하기 전 결과를 재활 의사결정에 사용하지 마세요.'}
+            </span>
           </div>
           <ul className="message-list quality-list">
             {(analysis.data_quality?.flags || []).length === 0 ? (
@@ -419,9 +505,13 @@ function App() {
   const backendUrl = DEFAULT_BACKEND_URL;
   const [rawJson, setRawJson] = useState(JSON.stringify(DEMO_SESSION, null, 2));
   const [analysis, setAnalysis] = useState(null);
+  const [analysisPersisted, setAnalysisPersisted] = useState(false);
+  const [analysisHistory, setAnalysisHistory] = useState([]);
+  const [userAnalyses, setUserAnalyses] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showJson, setShowJson] = useState(() => Boolean(sessionStorage.getItem('refitAccessToken')));
+  const [showRawJson, setShowRawJson] = useState(false);
 
   const [authMode, setAuthMode] = useState('login');
   const [authLoading, setAuthLoading] = useState(false);
@@ -434,6 +524,7 @@ function App() {
   const [accountEmail, setAccountEmail] = useState(() => sessionStorage.getItem('refitAccountEmail') || '');
   const [histories, setHistories] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
 
   const normalizedAiUrl = useMemo(() => aiUrl.replace(/\/$/, ''), [aiUrl]);
   const normalizedBackendUrl = useMemo(() => backendUrl.replace(/\/$/, ''), [backendUrl]);
@@ -443,10 +534,14 @@ function App() {
     setHistoryLoading(true);
     setError('');
     try {
-      const response = await requestJson(`${normalizedBackendUrl}/api/v1/game-histories?size=50`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const headers = { Authorization: `Bearer ${token}` };
+      const [response, trendResponse] = await Promise.all([
+        requestJson(`${normalizedBackendUrl}/api/v1/game-histories?size=50`, { headers }),
+        requestJson(`${normalizedBackendUrl}/api/v1/analyses?size=20`, { headers }).catch(() => null),
+      ]);
       setHistories(response.items || []);
+      if (trendResponse) setUserAnalyses(trendResponse.items || []);
+      setHistoryLoaded(true);
     } catch (requestError) {
       setError(`게임 기록 조회 실패: ${requestError.message}`);
     } finally {
@@ -549,6 +644,12 @@ function App() {
     await loadHistories(accessToken);
   };
 
+  const showAnalysis = (result, persisted = false) => {
+    setAnalysis(result);
+    setAnalysisPersisted(persisted);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const analyzePayload = async (payload) => {
     setLoading(true);
     setError('');
@@ -558,8 +659,8 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      setAnalysis(result);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      showAnalysis(result, false);
+      setAnalysisHistory([]);
     } catch (requestError) {
       setError(`AI 분석 실패: ${requestError.message}`);
     } finally {
@@ -576,7 +677,7 @@ function App() {
   };
 
   const runDemo = () => {
-    const payload = { ...DEMO_SESSION, started_at_ms: Date.now(), ended_at_ms: Date.now() + 20000 };
+    const payload = buildDemoSession();
     setRawJson(JSON.stringify(payload, null, 2));
     analyzePayload(payload);
   };
@@ -586,13 +687,32 @@ function App() {
     setError('');
     try {
       const headers = { Authorization: `Bearer ${accessToken}` };
-      const [history, savedProfile] = await Promise.all([
-        requestJson(`${normalizedBackendUrl}/api/v1/game-histories/${historyId}`, { headers }),
-        requestJson(`${normalizedBackendUrl}/api/v1/users/me/profile`, { headers }).catch(() => null),
+      let result;
+      let fallbackMessage = '';
+      try {
+        result = await requestJson(`${normalizedBackendUrl}/api/v1/game-histories/${historyId}/analyses`, {
+          method: 'POST',
+          headers,
+        });
+      } catch (analysisError) {
+        try {
+          result = await requestJson(`${normalizedBackendUrl}/api/v1/game-histories/${historyId}/analyses/latest`, { headers });
+          fallbackMessage = `새 분석 연결 실패(${analysisError.message}). DB에 저장된 최신 분석 결과를 표시합니다.`;
+        } catch {
+          throw analysisError;
+        }
+      }
+      showAnalysis(result, true);
+      if (fallbackMessage) setError(fallbackMessage);
+
+      const [history, savedAnalyses, trendResponse] = await Promise.all([
+        requestJson(`${normalizedBackendUrl}/api/v1/game-histories/${historyId}`, { headers }).catch(() => null),
+        requestJson(`${normalizedBackendUrl}/api/v1/game-histories/${historyId}/analyses?size=8`, { headers }).catch(() => null),
+        requestJson(`${normalizedBackendUrl}/api/v1/analyses?size=20`, { headers }).catch(() => null),
       ]);
-      const payload = savedProfile ? { ...history, profile: savedProfile } : history;
-      setRawJson(JSON.stringify(payload, null, 2));
-      await analyzePayload(payload);
+      if (history) setRawJson(JSON.stringify(history, null, 2));
+      setAnalysisHistory(savedAnalyses?.items || []);
+      if (trendResponse) setUserAnalyses(trendResponse.items || []);
     } catch (requestError) {
       setError(`게임 기록 분석 실패: ${requestError.message}`);
     } finally {
@@ -617,8 +737,13 @@ function App() {
       setAccountEmail('');
       setCredentials({ email: '', password: '' });
       setHistories([]);
+      setHistoryLoaded(false);
       setAnalysis(null);
+      setAnalysisPersisted(false);
+      setAnalysisHistory([]);
+      setUserAnalyses([]);
       setShowJson(false);
+      setShowRawJson(false);
       setAuthMode('login');
       setAuthError('');
     }
@@ -695,10 +820,27 @@ function App() {
           )}
         </section>
 
+        <section className="pipeline-panel" aria-label="데이터 연결 상태">
+          <div className="pipeline-copy">
+            <p className="section-kicker">Live data pipeline</p>
+            <strong>게임에서 리포트까지 연결 상태</strong>
+            <small>규칙 기반 분석 · 임상 진단이 아닌 재활 의사결정 보조 지표</small>
+          </div>
+          <div className="pipeline-flow">
+            <div><span>01</span><strong>Unity 센서</strong><small>계약 v2.0</small></div>
+            <i>→</i>
+            <div><span>02</span><strong>Spring · DB</strong><small>{historyLoaded ? `연결됨 · ${histories.length}건` : '연결 확인 중'}</small></div>
+            <i>→</i>
+            <div><span>03</span><strong>Rules Engine</strong><small>{analysis ? analysis.analysis_version : '분석 대기'}</small></div>
+            <i>→</i>
+            <div><span>04</span><strong>Patient Report</strong><small>{analysisPersisted ? 'DB 저장 완료' : analysis ? '미리보기' : '대기'}</small></div>
+          </div>
+        </section>
+
         {error && <div className="error-banner">{error}</div>}
 
         {showJson && (
-          <section className="input-workspace">
+          <section className={`input-workspace ${showRawJson ? 'raw-open' : ''}`}>
             <article className="panel connection-panel">
               <div className="panel-heading">
                 <div><p className="section-kicker">Account</p><h3>로그인된 계정</h3></div>
@@ -709,15 +851,18 @@ function App() {
               <button className="button secondary refresh-button" onClick={() => loadHistories()} disabled={historyLoading}>
                 {historyLoading ? '불러오는 중...' : '기록 새로고침'}
               </button>
+              <button className="text-button raw-toggle" onClick={() => setShowRawJson((value) => !value)}>
+                {showRawJson ? '개발자 JSON 닫기' : '개발자 JSON 열기'}
+              </button>
             </article>
 
-            <article className="panel json-panel">
+            {showRawJson && <article className="panel json-panel">
               <div className="panel-heading inline-heading">
                 <div><p className="section-kicker">Raw session</p><h3>분석할 JSON</h3></div>
                 <button className="button primary" onClick={analyzeJson} disabled={loading}>{loading ? '분석 중...' : '이 JSON 분석'}</button>
               </div>
               <textarea value={rawJson} onChange={(event) => setRawJson(event.target.value)} spellCheck="false" />
-            </article>
+            </article>}
 
             <article className="panel history-panel">
               <div className="panel-heading"><div><p className="section-kicker">Backend history</p><h3>저장된 게임 기록</h3></div></div>
@@ -725,7 +870,7 @@ function App() {
                 <div className="history-list">
                   {histories.map((history) => (
                     <button key={history.historyId} onClick={() => analyzeHistory(history.historyId)}>
-                      <span><strong>{history.gameName || history.gameId}</strong><small>{history.primaryPart} · {history.actionCount ?? 0}회</small></span>
+                      <span><strong>{history.gameName || history.gameId}</strong><small>{history.primaryPart} · {history.actionCount ?? 0}회 · 계약 {history.schemaVersion || 'legacy'}</small></span>
                       <span><strong>{history.score ?? '-'}</strong><small>{history.endedAtMs ? new Date(history.endedAtMs).toLocaleDateString('ko-KR') : ''}</small></span>
                     </button>
                   ))}
@@ -736,7 +881,12 @@ function App() {
         )}
 
         {analysis ? (
-          <AnalysisDashboard analysis={analysis} />
+          <AnalysisDashboard
+            analysis={analysis}
+            persisted={analysisPersisted}
+            analysisHistory={analysisHistory}
+            userAnalyses={userAnalyses}
+          />
         ) : (
           <section className="empty-state">
             <div className="empty-icon">↗</div>
