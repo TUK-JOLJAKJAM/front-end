@@ -38,6 +38,9 @@ test('renders the ReFit analysis dashboard entry point', () => {
 });
 
 test('sends a sample session to the configured AI analysis endpoint', async () => {
+  const configuredAiUrl = (process.env.REACT_APP_AI_API_URL || 'http://localhost:8000')
+    .replace(/\/$/, '');
+
   global.fetch = jest.fn().mockResolvedValue({
     ok: true,
     text: async () => JSON.stringify(ANALYSIS_RESPONSE),
@@ -48,7 +51,7 @@ test('sends a sample session to the configured AI analysis endpoint', async () =
 
   await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
   expect(global.fetch).toHaveBeenCalledWith(
-    'http://localhost:8000/api/v1/analyze_session',
+    `${configuredAiUrl}/api/v1/analyze_session`,
     expect.objectContaining({ method: 'POST' }),
   );
   expect(await screen.findByText('안정적으로 수행했습니다.')).toBeInTheDocument();
