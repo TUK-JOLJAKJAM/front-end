@@ -1,4 +1,4 @@
-name: frontend-ci-pages
+name: frontend-ci
 
 on:
   pull_request:
@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: pages-${{ github.ref }}
+  group: frontend-ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -42,33 +42,5 @@ jobs:
 
       - name: 운영 API 주소 포함 여부 검증
         run: |
-          grep --recursive --quiet 'https://43.200.20.216.sslip.io/ai' build/static/js
-          grep --recursive --quiet 'https://43.200.20.216.sslip.io' build/static/js
-
-      - name: Pages 배포 파일 업로드
-        if: github.event_name != 'pull_request'
-        uses: actions/upload-pages-artifact@v5
-        with:
-          path: ./build
-
-  deploy:
-    if: github.event_name != 'pull_request'
-    needs: test-and-build
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-
-    steps:
-      - name: GitHub Pages 배포
-        id: deployment
-        uses: actions/deploy-pages@v5
-
-      - name: 공개 페이지 스모크 테스트
-        run: |
-          curl --fail --silent --show-error --retry 20 --retry-all-errors --retry-delay 3 \
-            "${{ steps.deployment.outputs.page_url }}" | grep --quiet '<title>ReFit Analysis</title>'
+          grep --recursive --quiet 'http://43.200.20.216/ai' build/static/js
+          grep --recursive --quiet 'http://43.200.20.216' build/static/js

@@ -4,6 +4,7 @@ import './App.css';
 
 const DEFAULT_AI_URL = process.env.REACT_APP_AI_API_URL || 'http://localhost:8000';
 const DEFAULT_BACKEND_URL = process.env.REACT_APP_BACKEND_API_URL || 'http://localhost:8080';
+const IS_HTTP_DEMO = typeof window !== 'undefined' && window.location.protocol === 'http:';
 
 const DEMO_SESSION = {
   schema_version: '1.0',
@@ -383,6 +384,12 @@ function App() {
           </button>
         </div>
       </header>
+
+      {IS_HTTP_DEMO && (
+        <div className="demo-warning" role="status">
+          HTTP 데모 모드입니다. 실제 환자정보와 실사용 비밀번호 대신 테스트 계정과 비식별 데이터만 사용하세요.
+        </div>
+      )}
 
       <main className="main-content">
         <section className="page-heading">
