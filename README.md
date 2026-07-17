@@ -35,11 +35,13 @@ REACT_APP_BACKEND_API_URL=http://localhost:8080
 운영 빌드는 `.env.production`을 사용합니다.
 
 ```env
-REACT_APP_AI_API_URL=https://43.200.20.216.sslip.io/ai
-REACT_APP_BACKEND_API_URL=https://43.200.20.216.sslip.io
+REACT_APP_AI_API_URL=http://43.200.20.216/ai
+REACT_APP_BACKEND_API_URL=http://43.200.20.216
 ```
 
-`main`에 병합되면 GitHub Actions가 테스트와 운영 빌드를 실행하고 GitHub Pages에 자동 배포합니다. 빌드 안에 HTTPS 운영 API 주소가 실제로 포함됐는지도 CI에서 검사합니다.
+현재는 빠른 시연을 위한 HTTP 데모 모드입니다. `main`에 병합되면 GitHub Actions가 테스트와 운영 빌드를 검증하고, 백엔드 배포 파이프라인이 이 저장소를 체크아웃해 동일한 Lightsail 서버의 `/`에 배포합니다. `/api`는 Spring, `/ai`는 AI 서버로 전달됩니다.
+
+HTTP에서는 통신이 암호화되지 않으므로 테스트 계정과 비식별 데이터만 사용해야 합니다. 실제 사용자 테스트 전에는 HTTPS로 전환해야 합니다.
 
 ## 검증 및 빌드
 
@@ -48,4 +50,4 @@ CI=true npm test -- --watchAll=false
 npm run build
 ```
 
-GitHub Pages 기본 경로는 `https://tuk-joljakjam.github.io/front-end`로 설정되어 있습니다.
+HTTP 데모 공개 주소는 `http://43.200.20.216`입니다.

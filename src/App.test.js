@@ -33,6 +33,7 @@ afterEach(() => {
 test('renders the ReFit analysis dashboard entry point', () => {
   render(<App />);
   expect(screen.getByRole('heading', { name: '재활 게임 데이터 분석' })).toBeInTheDocument();
+  expect(screen.getByRole('status')).toHaveTextContent('HTTP 데모 모드');
   expect(screen.getAllByRole('button', { name: /샘플 분석/ }).length).toBeGreaterThan(0);
 });
 

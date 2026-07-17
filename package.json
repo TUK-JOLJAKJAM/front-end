@@ -2,7 +2,7 @@
   "name": "example",
   "version": "0.1.0",
   "private": true,
-  "homepage": "https://tuk-joljakjam.github.io/front-end",
+  "homepage": "http://43.200.20.216",
   "dependencies": {
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
