@@ -22,32 +22,97 @@ const ANALYSIS_RESPONSE = {
   risk_flags: [],
 };
 
+const CONFIGURED_BACKEND_URL = (process.env.REACT_APP_BACKEND_API_URL || 'http://localhost:8080').replace(/\/$/, '');
+
+function jsonResponse(body, ok = true) {
+  return Promise.resolve({
+    ok,
+    status: ok ? 200 : 401,
+    text: async () => (body === null ? '' : JSON.stringify(body)),
+  });
+}
+
 beforeEach(() => {
+  sessionStorage.clear();
   jest.spyOn(window, 'scrollTo').mockImplementation(() => {});
 });
 
 afterEach(() => {
   jest.restoreAllMocks();
+  delete global.fetch;
 });
 
-test('renders the ReFit analysis dashboard entry point', () => {
+test('restores the authentication entry point before the dashboard', () => {
   render(<App />);
-  expect(screen.getByRole('heading', { name: '재활 게임 데이터 분석' })).toBeInTheDocument();
+
+  expect(screen.getByRole('heading', { name: '환영합니다!' })).toBeInTheDocument();
+  expect(screen.getByRole('region', { name: '로그인' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: '재활 게임 데이터 분석' })).not.toBeInTheDocument();
   expect(screen.getByRole('status')).toHaveTextContent('HTTP 데모 모드');
-  expect(screen.getAllByRole('button', { name: /샘플 분석/ }).length).toBeGreaterThan(0);
 });
 
-test('sends a sample session to the configured AI analysis endpoint', async () => {
-  const configuredAiUrl = (process.env.REACT_APP_AI_API_URL || 'http://localhost:8000')
-    .replace(/\/$/, '');
-
-  global.fetch = jest.fn().mockResolvedValue({
-    ok: true,
-    text: async () => JSON.stringify(ANALYSIS_RESPONSE),
-  });
+test('logs in, loads histories, and only then opens the analysis dashboard', async () => {
+  global.fetch = jest.fn()
+    .mockImplementationOnce(() => jsonResponse({ accessToken: 'access-test', userId: 'user-test' }))
+    .mockImplementationOnce(() => jsonResponse({
+      items: [{ historyId: 'history-1', gameName: '수동 연동 테스트', primaryPart: 'SHOULDER', actionCount: 6, score: 84 }],
+    }));
 
   render(<App />);
-  fireEvent.click(screen.getByRole('button', { name: '샘플 분석 실행' }));
+  fireEvent.change(screen.getByLabelText('이메일'), { target: { value: '  test@example.com  ' } });
+  fireEvent.change(screen.getByLabelText('비밀번호'), { target: { value: 'RefitDemo!1234' } });
+  fireEvent.click(screen.getByRole('button', { name: '로그인하고 분석 보기' }));
+
+  expect(await screen.findByRole('heading', { name: '재활 게임 데이터 분석' })).toBeInTheDocument();
+  expect(await screen.findByText('수동 연동 테스트')).toBeInTheDocument();
+  expect(global.fetch).toHaveBeenNthCalledWith(
+    1,
+    `${CONFIGURED_BACKEND_URL}/api/v1/auth/login`,
+    expect.objectContaining({
+      method: 'POST',
+      body: expect.stringContaining('"email":"test@example.com"'),
+    }),
+  );
+  expect(global.fetch).toHaveBeenNthCalledWith(
+    2,
+    `${CONFIGURED_BACKEND_URL}/api/v1/game-histories?size=50`,
+    expect.objectContaining({ headers: { Authorization: 'Bearer access-test' } }),
+  );
+});
+
+test('signs up through Spring and shows profile setup before the dashboard', async () => {
+  global.fetch = jest.fn()
+    .mockImplementationOnce(() => jsonResponse(null))
+    .mockImplementationOnce(() => jsonResponse({ accessToken: 'new-access', userId: 'new-user' }))
+    .mockImplementationOnce(() => jsonResponse({ items: [] }));
+
+  render(<App />);
+  fireEvent.click(screen.getAllByRole('button', { name: '회원가입' })[0]);
+  fireEvent.change(screen.getByLabelText('이름'), { target: { value: '테스트 사용자' } });
+  fireEvent.change(screen.getByLabelText('이메일'), { target: { value: 'new@example.com' } });
+  fireEvent.change(screen.getByLabelText('비밀번호'), { target: { value: 'RefitDemo!1234' } });
+  fireEvent.change(screen.getByLabelText('비밀번호 확인'), { target: { value: 'RefitDemo!1234' } });
+  fireEvent.click(screen.getByRole('checkbox'));
+  fireEvent.click(screen.getByRole('button', { name: '가입하고 시작하기' }));
+
+  expect(await screen.findByRole('heading', { name: '테스트 프로필 설정' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '지금은 건너뛰기' }));
+  expect(await screen.findByRole('heading', { name: '재활 게임 데이터 분석' })).toBeInTheDocument();
+  expect(global.fetch).toHaveBeenNthCalledWith(
+    1,
+    `${CONFIGURED_BACKEND_URL}/api/v1/auth/signup`,
+    expect.objectContaining({ method: 'POST' }),
+  );
+});
+
+test('runs AI analysis only after an authenticated session exists', async () => {
+  const configuredAiUrl = (process.env.REACT_APP_AI_API_URL || 'http://localhost:8000').replace(/\/$/, '');
+  sessionStorage.setItem('refitAccessToken', 'existing-access');
+  sessionStorage.setItem('refitAccountEmail', 'test@example.com');
+  global.fetch = jest.fn().mockImplementation(() => jsonResponse(ANALYSIS_RESPONSE));
+
+  render(<App />);
+  fireEvent.click(screen.getByRole('button', { name: '샘플 분석' }));
 
   await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
   expect(global.fetch).toHaveBeenCalledWith(
