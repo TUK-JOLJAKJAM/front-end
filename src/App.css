@@ -424,6 +424,7 @@ button { cursor: pointer; }
 .history-list button:hover { border-color: #95b6e6; background: #f7faff; }
 .history-list span { display: flex; flex-direction: column; gap: 4px; }
 .history-list span:last-child { align-items: flex-end; }
+.history-list span:last-child small { white-space: nowrap; }
 .history-list strong { color: var(--navy); font-size: 13px; }
 .history-list small { color: var(--muted); font-size: 11px; }
 .empty-text { color: var(--muted); font-size: 13px; }
